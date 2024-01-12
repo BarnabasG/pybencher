@@ -28,9 +28,13 @@ class Suite:
             'ms': 1e-3,
             's': 1,
         }
+        # Number of seconds to run each function before exiting early
         self.timeout = 10
+        # Maximum number of iterations to run each function
         self.max_itr = 1000
+        # Minimum number of iterations to run each function
         self.min_itr = 3
+        # Percentage of iterations to cut off from each end when calculating average time
         self.cut = 0.05
     
     def __hash__(self):
@@ -54,8 +58,6 @@ class Suite:
     def add(self, func, *args, **kwargs):
         if not callable(func):
             raise TypeError('must be a function')
-        # if args or kwargs:
-        #     self.function_inputs[self.hash_func(func, args, kwargs.items())] = (args, kwargs)
         self.tests.append(Function(func, *args, **kwargs))
     
     def get_suite(self):
