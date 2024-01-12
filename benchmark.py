@@ -1,7 +1,7 @@
 from datetime import datetime as dt
 from timeit import default_timer as timer
 
-class Function:
+class _Function:
     def __init__(self, func, *args, **kwargs):
         self.func = func
         self.args = args
@@ -12,7 +12,7 @@ class Function:
         return self.func(*self.args, **self.kwargs)
     
     def __hash__(self):
-        return hash(tuple([self.func.__name__, self.args, tuple(self.kwargs.items())]))
+        return hash(tuple([self.name, self.args, tuple(self.kwargs.items())]))
     
     def pretty(self):
         return f'{self.name}({", ".join([str(a) for a in self.args])}{", " if self.args and self.kwargs else ""}{", ".join([f"{k}={v}" for k, v in self.kwargs.items()])})'
@@ -55,7 +55,7 @@ class Suite:
     def add(self, func, *args, **kwargs):
         if not callable(func):
             raise TypeError('must be a function')
-        self.tests.append(Function(func, *args, **kwargs))
+        self.tests.append(_Function(func, *args, **kwargs))
     
     def clear(self):
         self.tests = []

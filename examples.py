@@ -30,7 +30,7 @@ def argskwargs(*args, **kwargs):
 from random import random
 from time import sleep
 def random_sleep():
-    sleep(random()/500)
+    sleep(random()/1000)
 
 
 suite = Suite()
