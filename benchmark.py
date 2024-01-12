@@ -12,7 +12,7 @@ class Function:
         return self.func(*self.args, **self.kwargs)
     
     def __hash__(self):
-        return hash(tuple([self.func.__name__, self.args, self.kwargs.items()]))
+        return hash(tuple([self.func.__name__, self.args, tuple(self.kwargs.items())]))
     
     def pretty(self):
         return f'{self.name}({", ".join([str(a) for a in self.args])}{", " if self.args and self.kwargs else ""}{", ".join([f"{k}={v}" for k, v in self.kwargs.items()])})'
@@ -38,10 +38,7 @@ class Suite:
         self.cut = 0.05
     
     def __hash__(self):
-        return hash(tuple(self.tests))
-    
-    def hash_func(self, func, args, kwargs):
-        return hash(tuple([func.__name__, args, kwargs]))
+        return hash(tuple([t.__hash__() for t in self.tests]))
 
     def set_timeout(self, t):
         self.timeout = t
@@ -59,6 +56,9 @@ class Suite:
         if not callable(func):
             raise TypeError('must be a function')
         self.tests.append(Function(func, *args, **kwargs))
+    
+    def clear(self):
+        self.tests = []
     
     def get_suite(self):
         return {
