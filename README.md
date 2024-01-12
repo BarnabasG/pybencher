@@ -1,6 +1,6 @@
-### Python Benchmarking Suite
+### pybench - Python Benchmarking Suite
 
-Exposes a class 'Suite' that allows adding functions and arguments to a benchmark suite which can then be run to benchmark performance.
+pybench exposes a class 'Suite' that allows adding functions and arguments to a benchmark suite which can then be run to benchmark performance.
 After adding your functions and arguments to the suite instance, call suite.run() to trigger the benchmark tests.
 
 
