@@ -31,7 +31,7 @@ class Suite:
         self.timeout = 10
         self.max_itr = 1000
         self.min_itr = 3
-        # self.function_inputs = {}
+        self.cut = 0.05
     
     def __hash__(self):
         return hash(tuple(self.tests))
@@ -47,6 +47,9 @@ class Suite:
 
     def set_min_itr(self, n):
         self.min_itr = n
+    
+    def set_cut(self, n):
+        self.cut = n
 
     def add(self, func, *args, **kwargs):
         if not callable(func):
@@ -61,20 +64,22 @@ class Suite:
             'timeout': self.timeout,
             'max_itr': self.max_itr,
             'min_itr': self.min_itr,
+            'cut percentage': self.cut
         }
     
     def run_test(self, func):
         times = []
         total_time = 0
         executions = 0
-        for _ in range(self.max_itr):
+        actual_max_runs = int(self.max_itr / (1-(2*self.cut)))
+        for _ in range(actual_max_runs):
             start = timer()
             func()
             end = timer()
             times.append(end - start)
             total_time += end - start
             executions += 1
-            if total_time > self.timeout:
+            if total_time > self.timeout and executions >= self.min_itr:
                 break
         return times, executions
     
@@ -87,21 +92,21 @@ class Suite:
         return str(dt.timedelta(seconds=int(round(t)))).removeprefix('0:')
     
     def get_output_details(self, times, executions):
-        times.sort()
-        # remove top and bottom 10%
-        times = times[int(executions*.1):int(executions*.9)]
-        avg = sum(times) / len(times)
-        std = (sum((t - avg)**2 for t in times) / len(times))**.5
-        med = times[int(len(times)/2)]
-        minimum = times[0]
-        maximum = times[-1]
+        s = sorted(times)
+        minimum = s[0]
+        maximum = s[-1]
+        s = s[int(executions*self.cut):int(executions*(1-self.cut))]
+        avg = sum(s) / len(s)
+        std = (sum((t - avg)**2 for t in s) / len(s))**.5
+        med = s[int(len(s)/2)]
         return {
             'avg': avg,
             'std': std,
             'median': med,
             'minimum': minimum,
             'maximum': maximum,
-            'iterations': executions
+            'iterations': executions,
+            'counted_iterations': len(s),
         }
         
     def run(self, verbose=False):
@@ -109,7 +114,7 @@ class Suite:
         for func in self.tests:
             times, executions = self.run_test(func)
             details = self.get_output_details(times, executions)
-            print(f'{func.name}: {self.pretty_time(details["avg"])}/itr ({details["iterations"]} itr)')
+            print(f'{func.name}: {self.pretty_time(details["avg"])}/itr ({details["counted_iterations"]} itr)')
             if verbose:
                 if func.args or func.kwargs:
                     print(f'  args: {func.args}')
@@ -119,4 +124,5 @@ class Suite:
                 print(f'  minimum: {self.pretty_time(details["minimum"])}')
                 print(f'  maximum: {self.pretty_time(details["maximum"])}')
                 print(f'  iterations: {details["iterations"]}')
-
+                print(f'  counted iterations: {details["counted_iterations"]}')
+                print(f'  total time: {self.pretty_time(sum(times))}')

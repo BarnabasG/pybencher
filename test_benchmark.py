@@ -1,6 +1,5 @@
 from benchmark import Suite
 
-
 def foo():
     x = 0
     for _ in range(10000):
@@ -31,7 +30,7 @@ def argskwargs(*args, **kwargs):
 from random import random
 from time import sleep
 def random_sleep():
-    sleep(random()/1000)
+    sleep(random()/500)
 
 
 suite = Suite()
