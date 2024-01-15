@@ -101,12 +101,15 @@ class Suite:
         avg = sum(s) / len(s)
         std = (sum((t - avg)**2 for t in s) / len(s))**.5
         med = s[int(len(s)/2)]
+        itrps = len(s) / sum(s)
+        itrps = int(itrps) if itrps > 10 else round(itrps,2)
         return {
             'avg': avg,
             'std': std,
             'median': med,
             'minimum': minimum,
             'maximum': maximum,
+            'itr_ps': itrps,
             'iterations': executions,
             'counted_iterations': len(s),
         }
@@ -116,7 +119,7 @@ class Suite:
         for func in self.tests:
             times, executions = self.run_test(func)
             details = self.get_output_details(times, executions)
-            print(f'{func.name}: {self.pretty_time(details["avg"])}/itr ({details["counted_iterations"]} itr)')
+            print(f'{func.name}: {self.pretty_time(details["avg"])}/itr | {details['itr_ps']} itr/s')
             if verbose:
                 if func.args or func.kwargs:
                     print(f'  args: {func.args}')
