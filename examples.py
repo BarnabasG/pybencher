@@ -7,7 +7,7 @@ def foo():
 
 def bar():
     x = 0
-    for _ in range(1000):
+    for _ in range(10000):
         x+=2
         x-=1
 
