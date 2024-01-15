@@ -11,6 +11,9 @@ def bar():
         x+=2
         x-=1
 
+def baz():
+    pass
+
 def quux():
     x = ''
     for i in range(10000):
@@ -36,6 +39,7 @@ def random_sleep():
 suite = Suite()
 suite.add(foo)
 suite.add(bar)
+suite.add(baz)
 suite.add(quux)
 suite.add(quuz)
 suite.add(argskwargs, 1, 2, 3, a=4, b=5, c=6)
