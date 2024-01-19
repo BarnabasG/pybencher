@@ -19,6 +19,10 @@ class _Function:
 
 
 class Suite:
+    """
+    A class representing a suite of benchmark tests.
+    """
+
     def __init__(self):
         self.tests = []
         self.units = {
@@ -53,14 +57,35 @@ class Suite:
         self.cut = n
 
     def add(self, func, *args, **kwargs):
+        """
+        Adds a benchmark test function to the suite.
+        
+        Args:
+            func (function): The benchmark test function to be added.
+            *args: Variable-length arguments to be passed to the benchmark test function.
+            **kwargs: Keyword arguments to be passed to the benchmark test function.
+        
+        Raises:
+            TypeError: If the provided `func` is not callable.
+        """
         if not callable(func):
             raise TypeError('must be a function')
         self.tests.append(_Function(func, *args, **kwargs))
     
     def clear(self):
+        """
+        Clears the list of benchmark test functions in the suite.
+        """
         self.tests = []
     
     def get_suite(self):
+        """
+        Returns a dictionary containing the details of the suite.
+        
+        Returns:
+            dict: A dictionary containing the details of the suite, including the list of benchmark tests,
+                  timeout value, maximum number of iterations, minimum number of iterations, and cut percentage.
+        """
         return {
             'tests': [t.pretty() for t in self.tests],
             'timeout': self.timeout,
@@ -69,7 +94,7 @@ class Suite:
             'cut percentage': self.cut
         }
     
-    def run_test(self, func):
+    def _run_test(self, func):
         times = []
         total_time = 0
         executions = 0
@@ -85,7 +110,7 @@ class Suite:
                 break
         return times, executions
     
-    def pretty_time(self, t):
+    def _pretty_time(self, t):
         for unit, ratio in self.units.items():
             factor = 59.95 if unit == 's' else 999.5
             if t < factor * ratio:
@@ -93,7 +118,7 @@ class Suite:
                 return f'{num}{unit}'
         return str(dt.timedelta(seconds=int(round(t)))).removeprefix('0:')
     
-    def get_output_details(self, times, executions):
+    def _get_output_details(self, times, executions):
         s = sorted(times)
         minimum = s[0]
         maximum = s[-1]
@@ -115,19 +140,26 @@ class Suite:
         }
         
     def run(self, verbose=False):
+        """
+        Runs the benchmark tests in the suite and prints the results.
+        
+        Args:
+            verbose (bool, optional): If True, prints additional details for each benchmark test. 
+                                    Defaults to False.
+        """
         print(f'Running tests {[t.name for t in self.tests]}')
         for func in self.tests:
-            times, executions = self.run_test(func)
-            details = self.get_output_details(times, executions)
-            print(f'{func.name}: {self.pretty_time(details["avg"])}/itr | {details['itr_ps']} itr/s')
+            times, executions = self._run_test(func)
+            details = self._get_output_details(times, executions)
+            print(f'{func.name}: {self._pretty_time(details["avg"])}/itr | {details['itr_ps']} itr/s')
             if verbose:
                 if func.args or func.kwargs:
                     print(f'  args: {func.args}')
                     print(f'  kwargs: {func.kwargs}')
-                print(f'  std: {self.pretty_time(details["std"])}')
-                print(f'  median: {self.pretty_time(details["median"])}')
-                print(f'  minimum: {self.pretty_time(details["minimum"])}')
-                print(f'  maximum: {self.pretty_time(details["maximum"])}')
+                print(f'  std: {self._pretty_time(details["std"])}')
+                print(f'  median: {self._pretty_time(details["median"])}')
+                print(f'  minimum: {self._pretty_time(details["minimum"])}')
+                print(f'  maximum: {self._pretty_time(details["maximum"])}')
                 print(f'  iterations: {details["iterations"]}')
                 print(f'  counted iterations: {details["counted_iterations"]}')
-                print(f'  total time: {self.pretty_time(sum(times))}')
+                print(f'  total time: {self._pretty_time(sum(times))}')
