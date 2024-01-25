@@ -1,14 +1,14 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "pybencher"
-version = "0.0.1"
+version = "0.0.4"
 authors = [
   { name="Barnaby Gill", email="barnabasgill@gmail.com" },
 ]
-description = "A small example package"
+description = "PyBencher is a Python benchmarking module for benchmarking several python functions at once. PyBencher supports tuneable benchmarking parameters as well as args and kwargs for function calls."
 readme = "README.md"
 requires-python = ">=3.6"
 classifiers = [
