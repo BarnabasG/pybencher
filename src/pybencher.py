@@ -28,7 +28,7 @@ class Suite:
         self.units = {
             'ps': 1e-12,
             'ns': 1e-9,
-            'μs': 1e-6,
+            'us': 1e-6,
             'ms': 1e-3,
             's': 1,
         }
@@ -151,7 +151,7 @@ class Suite:
         for func in self.tests:
             times, executions = self._run_test(func)
             details = self._get_output_details(times, executions)
-            print(f'{func.name}: {self._pretty_time(details["avg"])}/itr | {details['itr_ps']} itr/s')
+            print(f'{func.name}: {self._pretty_time(details["avg"])}/itr | {details["itr_ps"]} itr/s')
             if verbose:
                 if func.args or func.kwargs:
                     print(f'  args: {func.args}')
