@@ -1,15 +1,51 @@
 from datetime import datetime as dt
-from timeit import default_timer as timer
+from time import perf_counter
 
-class _Function:
-    def __init__(self, func, *args, **kwargs):
+from contextlib import redirect_stdout
+import io
+from typing import Any, Dict, List, Optional, Tuple
+
+class _BeforeAfter:
+    """
+    A class representing a function to be run before or after a benchmark test.
+    """
+    def __init__(self, func: Any, *args, **kwargs):
         self.func = func
         self.args = args
         self.kwargs = kwargs
         self.name = func.__name__
     
-    def __call__(self):
+    def __call__(self) -> None:
         return self.func(*self.args, **self.kwargs)
+    
+    def __hash__(self):
+        return hash(tuple([self.func.__name__, self.args, tuple(self.kwargs.items())]))
+
+class _Function:
+    """
+    A class representing a benchmark test function.
+    """
+    def __init__(self, func: Any, *args, **kwargs):
+        self.func = func
+        self.before = None
+        self.after = None
+        self.args = args
+        self.kwargs = kwargs
+        self.name = func.__name__
+    
+    def beforeAfter(self, before: Optional[_BeforeAfter]=None, after: Optional[_BeforeAfter]=None):
+        self.before = before
+        self.after = after
+    
+    def __call__(self) -> Tuple[float, Any]:
+        if self.before:
+            self.before()
+        start_time = perf_counter()
+        result = self.func(*self.args, **self.kwargs)
+        end_time = perf_counter()
+        if self.after:
+            self.after()
+        return end_time - start_time, result
     
     def __hash__(self):
         return hash(tuple([self.name, self.args, tuple(self.kwargs.items())]))
@@ -22,8 +58,7 @@ class Suite:
     """
     A class representing a suite of benchmark tests.
     """
-
-    def __init__(self):
+    def __init__(self) -> None:
         self.tests = []
         self.units = {
             'ps': 1e-12,
@@ -40,23 +75,30 @@ class Suite:
         self.min_itr = 3
         # Percentage of iterations to cut off from each end when calculating average time
         self.cut = 0.05
+        # If True, disables stdout. Defaults to False.
+        self.disable_stdout = False
+        # If True, prints additional details for each benchmark test. Defaults to False.
+        self.verbose = False
+
+        self._beforeFunc = None
+        self._afterFunc = None
     
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(tuple([t.__hash__() for t in self.tests]))
 
-    def set_timeout(self, t):
+    def set_timeout(self, t: float) -> None:
         self.timeout = t
     
-    def set_max_itr(self, n):
+    def set_max_itr(self, n: int) -> None:
         self.max_itr = n
 
-    def set_min_itr(self, n):
+    def set_min_itr(self, n: int) -> None:
         self.min_itr = n
     
-    def set_cut(self, n):
+    def set_cut(self, n: int) -> None:
         self.cut = n
 
-    def add(self, func, *args, **kwargs):
+    def add(self, func: Any, *args, **kwargs) -> None:
         """
         Adds a benchmark test function to the suite.
         
@@ -72,13 +114,25 @@ class Suite:
             raise TypeError('must be a function')
         self.tests.append(_Function(func, *args, **kwargs))
     
-    def clear(self):
+    def before(self, func: Any, *args, **kwargs) -> None:
+        """
+        Sets a function to be run before each benchmark test in the suite.
+        """
+        self._beforeFunc = _BeforeAfter(func, *args, **kwargs)
+    
+    def after(self, func: Any, *args, **kwargs) -> None:
+        """
+        Sets a function to be run after each benchmark test in the suite.
+        """
+        self._afterFunc = _BeforeAfter(func, *args, **kwargs)
+    
+    def clear(self) -> None:
         """
         Clears the list of benchmark test functions in the suite.
         """
         self.tests = []
     
-    def get_suite(self):
+    def get_suite(self) -> Dict[str, Any]:
         """
         Returns a dictionary containing the details of the suite.
         
@@ -91,26 +145,41 @@ class Suite:
             'timeout': self.timeout,
             'max_itr': self.max_itr,
             'min_itr': self.min_itr,
-            'cut percentage': self.cut
+            'cut_percentage': self.cut,
+            'disable_stdout': self.disable_stdout,
+            'verbose': self.verbose,
+            'before': self._beforeFunc.name if self._beforeFunc else None,
+            'after': self._afterFunc.name if self._afterFunc else None
         }
+
+    def _setup(self) -> None:
+        """
+        Sets up the benchmark tests in the suite.
+        """
+        self._applyBeforeAfter()
     
-    def _run_test(self, func):
+    def _applyBeforeAfter(self):
+        """
+        Applies the before and after functions to each test in the suite.
+        """
+        for test in self.tests:
+            test.beforeAfter(self._beforeFunc, self._afterFunc)
+    
+    def _run_test(self, func: _Function) -> Tuple[List[float], int]:
         times = []
         total_time = 0
         executions = 0
         actual_max_runs = int(self.max_itr / (1-(2*self.cut)))
         for _ in range(actual_max_runs):
-            start = timer()
-            func()
-            end = timer()
-            times.append(end - start)
-            total_time += end - start
+            t, _ = func()
+            times.append(t)
+            total_time += t
             executions += 1
             if total_time > self.timeout and executions >= self.min_itr:
                 break
         return times, executions
     
-    def _pretty_time(self, t):
+    def _pretty_time(self, t: float) -> str:
         for unit, ratio in self.units.items():
             factor = 59.95 if unit == 's' else 999.5
             if t < factor * ratio:
@@ -118,7 +187,7 @@ class Suite:
                 return f'{num}{unit}'
         return str(dt.timedelta(seconds=int(round(t)))).removeprefix('0:')
     
-    def _get_output_details(self, times, executions):
+    def _get_output_details(self, times: List[float], executions: int) -> Dict[str, Any]:
         s = sorted(times)
         minimum = s[0]
         maximum = s[-1]
@@ -139,20 +208,21 @@ class Suite:
             'counted_iterations': len(s),
         }
         
-    def run(self, verbose=False):
+    def run(self) -> None:
         """
         Runs the benchmark tests in the suite and prints the results.
-        
-        Args:
-            verbose (bool, optional): If True, prints additional details for each benchmark test. 
-                                    Defaults to False.
         """
         print(f'Running tests {[t.name for t in self.tests]}')
+        self._setup()
         for func in self.tests:
-            times, executions = self._run_test(func)
+            if self.disable_stdout:
+                with io.StringIO() as buf, redirect_stdout(buf):
+                    times, executions = self._run_test(func)
+            else:
+                times, executions = self._run_test(func)
             details = self._get_output_details(times, executions)
             print(f'{func.name}: {self._pretty_time(details["avg"])}/itr | {details["itr_ps"]} itr/s')
-            if verbose:
+            if self.verbose:
                 if func.args or func.kwargs:
                     print(f'  args: {func.args}')
                     print(f'  kwargs: {func.kwargs}')
