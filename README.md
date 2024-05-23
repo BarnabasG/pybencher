@@ -57,7 +57,7 @@ suite = Suite()
 ## 5. Code Example
 
 ```python
-from src.pybencher import Suite
+from pybencher import Suite
 
 # Define some functions to benchmark
 def foo():
@@ -70,16 +70,6 @@ def bar():
 
 def baz():
     pass
-
-def quux():
-    x = ''
-    for i in range(10000):
-        x += chr(i%256)
-
-def quuz():
-    x = []
-    for i in range(10000):
-        x.append(i)
 
 def argskwargs(*args, **kwargs):
     total = sum(args)
@@ -122,8 +112,6 @@ suite1.disable_stdout = True
 suite1.add(foo)
 suite1.add(bar)
 suite1.add(baz)
-suite1.add(quux)
-suite1.add(quuz)
 suite1.add(argskwargs, 1, 2, 3, a=4, b=5, c=6)
 suite1.add(argskwargs, 1, 2, 3)
 suite1.add(argskwargs, a=4, b=5, c=6)
@@ -153,4 +141,34 @@ print()
 
 print(suite2.get_suite())
 suite2.run()
+```
+
+### Example output:
+```
+'tests': ['foo()', 'bar()', 'baz()', 'argskwargs(1, 2, 3, a=4, b=5, c=6)', 'argskwargs(1, 2, 3)', 'argskwargs(a=4, b=5, c=6)', 'argskwargs()', 'random_sleep()'], 'timeout': 10, 'max_itr': 1000, 'min_itr': 3, 'cut_percentage': 0.05, 'disable_stdout': True, 'verbose': False, 'before': None, 'after': None}
+Running tests ['foo', 'bar', 'baz', 'argskwargs', 'argskwargs', 'argskwargs', 'argskwargs', 'random_sleep']
+foo: 451us/itr | 2215 itr/s
+bar: 528ns/itr | 1892863 itr/s
+baz: 193ns/itr | 5173308 itr/s
+argskwargs: 776ns/itr | 1288161 itr/s
+argskwargs: 474ns/itr | 2109703 itr/s
+argskwargs: 701ns/itr | 1426736 itr/s
+argskwargs: 408ns/itr | 2447981 itr/s
+random_sleep: 920us/itr | 1086 itr/s
+
+{'tests': ['cleanup()'], 'timeout': 10, 'max_itr': 5, 'min_itr': 3, 'cut_percentage': 0.05, 'disable_stdout': False, 'verbose': True, 'before': 'beforeSetup', 'after': 'afterCleanup'}
+Running tests ['cleanup']
+Shared list 1 length: 20001, Shared list 2 length 20001
+Shared list 1 length: 20001, Shared list 2 length 20001
+Shared list 1 length: 20001, Shared list 2 length 20001
+Shared list 1 length: 20001, Shared list 2 length 20001
+Shared list 1 length: 20001, Shared list 2 length 20001
+cleanup: 313us/itr | 3191 itr/s
+  std: 22.8us
+  median: 323us
+  minimum: 276us
+  maximum: 338us
+  iterations: 5
+  counted iterations: 4
+  total time: 1.59ms
 ```
