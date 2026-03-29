@@ -1,5 +1,4 @@
 import pytest
-import warnings
 from pybencher import Suite
 
 def test_warmup_increments_calls() -> None:
