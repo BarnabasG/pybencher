@@ -1,6 +1,6 @@
 # PyBencher
 
-![GitHub Release](https://img.shields.io/github/v/release/BarnabasG/pybencher) [![PyPI Downloads](https://static.pepy.tech/personalized-badge/pybencher?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/pybencher) ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/BarnabasG/pybencher/ci.yml)
+![GitHub Release](https://img.shields.io/github/v/release/BarnabasG/pybencher) [![PyPI Downloads](https://static.pepy.tech/personalized-badge/pybencher?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/pybencher) ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/BarnabasG/pybencher/pipeline.yml)
 
 PyBencher is a simple, decorator-based benchmarking suite for Python. It provides detailed timing statistics (average, median, standard deviation) and supports per-test configuration overrides.
 
@@ -32,15 +32,15 @@ def fast():
 def add(a, b):
     return a + b
 
-# Run and print results
-results = suite.run()
-results.print()
-
 # Manual registration (equivalent to @suite.bench)
 def manual_func(n):
     return sum(range(n))
 
 suite.add(manual_func, 1000, bench_name="Manual Register")
+
+# Run and print results
+results = suite.run()
+results.print()
 ```
 
 ## Configuration Overrides
@@ -67,6 +67,9 @@ Any setting in the `Suite` can be overridden for a specific benchmark by prefixi
 - `max_itr` (int): Default max runs (1000).
 - `min_itr` (int): Default min runs (3).
 - `cut` (float): Default outlier threshold (0.05).
+- `warmup_itr` (int): Number of unmeasured runs to perform before benchmarking (0).
+- `validate_responses` (bool): Enable cross-test output consistency checks (False).
+- `validate_limit` (int): Max number of iterations to store for full sequence validation (10,000).
 - `disable_stdout` (bool): Global stdout suppressor.
 - `verbose` (bool): Global verbosity flag.
 
@@ -111,3 +114,9 @@ Sleepy: 100ms/itr | 10.0 itr/s
   runs:    10 (10 counted)
   total:   1.01s
 ```
+
+## CI/CD Pipeline
+
+PyBencher uses an automated GitHub Actions pipeline:
+- **Testing**: Every push to any branch triggers a full test suite across Linux, Windows, and macOS for Python 3.10–3.14.
+- **Publishing**: Pushes to `main` automatically publish to PyPI **if and only if** all tests pass.
