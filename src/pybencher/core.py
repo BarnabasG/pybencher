@@ -1,5 +1,6 @@
 import io
 import json
+import warnings
 from contextlib import redirect_stdout
 from dataclasses import asdict, dataclass
 from datetime import timedelta
@@ -153,6 +154,9 @@ class Suite:
         self.cut = 0.05
         self.disable_stdout = False
         self.verbose = False
+        self.warmup_itr = 0
+        self.validate_responses = False
+        self.validate_limit = 10000
         self._beforeFunc: Optional[_BeforeAfter] = None
         self._afterFunc: Optional[_BeforeAfter] = None
 
@@ -176,6 +180,15 @@ class Suite:
 
     def set_cut(self, n: float) -> None:
         self.cut = n
+
+    def set_warmup_itr(self, n: int) -> None:
+        self.warmup_itr = n
+
+    def set_validate_responses(self, val: bool) -> None:
+        self.validate_responses = val
+
+    def set_validate_limit(self, n: int) -> None:
+        self.validate_limit = n
 
     def add(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
         """Add a function to the suite."""
@@ -212,10 +225,12 @@ class Suite:
         for t in self.tests:
             t.before_after(self._beforeFunc, self._afterFunc)
 
-    def _run_test(self, func: _Function) -> Tuple[List[float], int]:
+    def _run_test(self, func: _Function) -> Tuple[List[float], int, List[Any], int]:
         times = []
         total = 0.0
         runs = 0
+        results_seq: List[Any] = []
+        tail_hash = 0
 
         # Configuration priority: test override > suite default
         max_itr = func.bench_max_itr if func.bench_max_itr is not None else self.max_itr
@@ -223,15 +238,26 @@ class Suite:
         min_itr = func.bench_min_itr if func.bench_min_itr is not None else self.min_itr
         cut = func.bench_cut if func.bench_cut is not None else self.cut
 
+        # Warm-up phase
+        for _ in range(self.warmup_itr):
+            func()
+
         actual_max = int(max_itr / (1 - (2 * cut)))
         for _ in range(actual_max):
-            t, _ = func()
+            t, res = func()
             times.append(t)
             total += t
             runs += 1
+
+            if self.validate_responses:
+                if len(results_seq) < self.validate_limit:
+                    results_seq.append(res)
+                else:
+                    tail_hash = hash((tail_hash, res))
+
             if total > timeout and runs >= min_itr:
                 break
-        return times, runs
+        return times, runs, results_seq, tail_hash
 
     def _get_output_details(self, func: _Function, times: List[float], runs: int) -> BenchmarkResult:
         s = sorted(times)
@@ -279,15 +305,54 @@ class Suite:
     def run(self) -> BenchmarkResults:
         """Run registered tests and return results."""
         self._apply_before_after()
+
+        if self.validate_responses and len(self.tests) > 1:
+            # Check for inconsistent args/kwargs
+            first_args = (self.tests[0].args, self.tests[0].kwargs)
+            for t in self.tests[1:]:
+                if (t.args, t.kwargs) != first_args:
+                    warnings.warn(
+                        "validate_responses is enabled but benchmark targets have different arguments. "
+                        "This may lead to validation failures.",
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
+                    break
+
         results = []
+        all_sequences: List[Tuple[List[Any], int]] = []
+
         for func in self.tests:
             mute = func.bench_disable_stdout if func.bench_disable_stdout is not None else self.disable_stdout
             if mute:
                 with io.StringIO() as buf, redirect_stdout(buf):
-                    times, runs = self._run_test(func)
+                    times, runs, seq, thash = self._run_test(func)
             else:
-                times, runs = self._run_test(func)
+                times, runs, seq, thash = self._run_test(func)
 
+            all_sequences.append((seq, thash))
             results.append(self._get_output_details(func, times, runs))
+
+        if self.validate_responses and len(all_sequences) > 1:
+            first_seq, first_hash = all_sequences[0]
+            for i, (seq, thash) in enumerate(all_sequences[1:], 1):
+                # Compare sequences up to minimum length
+                min_len = min(len(first_seq), len(seq))
+                if first_seq[:min_len] != seq[:min_len]:
+                    raise ValueError(
+                        f"Response validation failed between '{self.tests[0].pretty()}' "
+                        f"and '{self.tests[i].pretty()}': sequences do not match."
+                    )
+                # Compare hashes ONLY if both reached the same length beyond the limit
+                if (
+                    len(first_seq) >= self.validate_limit
+                    and len(seq) >= self.validate_limit
+                    and results[0].iterations == results[i].iterations
+                ):
+                    if first_hash != thash:
+                        raise ValueError(
+                            f"Response validation failed between '{self.tests[0].pretty()}' "
+                            f"and '{self.tests[i].pretty()}': tail hashes do not match."
+                        )
 
         return BenchmarkResults(results)
