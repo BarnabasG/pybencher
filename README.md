@@ -1,174 +1,113 @@
-# PyBencher - Python Bechmarker
+# PyBencher
 
-## 1. Introduction
+![GitHub Release](https://img.shields.io/github/v/release/BarnabasG/pybencher) [![PyPI Downloads](https://static.pepy.tech/personalized-badge/pybencher?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/pybencher) ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/BarnabasG/pybencher/ci.yml)
 
-PyBencher is a Python package that provides a suite of benchmark tests for measuring the performance of code snippets or functions. It allows you to easily define and run benchmark tests, and provides detailed timing information for analysis and comparison.
+PyBencher is a simple, decorator-based benchmarking suite for Python. It provides detailed timing statistics (average, median, standard deviation) and supports per-test configuration overrides.
 
-The `Suite` class represents a suite of benchmark tests. It allows you to add benchmark test functions, set various parameters, and run the tests.
+## Installation
 
-## 2. Installation
-
-To install PyBencher, you can use pip, the Python package manager. Open a terminal or command prompt and run the following command:
-
-```
+```bash
 pip install pybencher
 ```
 
-## 3. Usage
-
-To use the `Suite` class in your Python script or module, you need to import it first. Here's an example:
+## Basic Usage
 
 ```python
 from pybencher import Suite
-```
 
-Once you have imported the `Suite` class, you can create an instance of it as follows:
-
-```python
 suite = Suite()
+
+# Quick registration
+@suite.bench()
+def my_function():
+    return sum(range(10000))
+
+# Custom configuration using 'bench_' prefix
+@suite.bench(bench_name="Fast Math", bench_max_itr=5000)
+def fast():
+    return 1 + 1
+
+# Positional and keyword arguments are passed directly
+@suite.bench(10, 20, bench_name="Add")
+def add(a, b):
+    return a + b
+
+# Run and print results
+results = suite.run()
+results.print()
+
+# Manual registration (equivalent to @suite.bench)
+def manual_func(n):
+    return sum(range(n))
+
+suite.add(manual_func, 1000, bench_name="Manual Register")
 ```
 
-## 4. Class Reference
+## Configuration Overrides
+
+Any setting in the `Suite` can be overridden for a specific benchmark by prefixing it with `bench_`. This ensures that benchmark configuration does not interfere with your function's own parameters (e.g., using `timeout=0.5` as a function argument while setting `bench_timeout=5.0` for the suite).
+
+| Override | Type | Description |
+| --- | --- | --- |
+| `bench_name` | `str` | Display name in reports |
+| `bench_timeout` | `float` | Per-test time limit in seconds |
+| `bench_max_itr` | `int` | Maximum execution count |
+| `bench_min_itr` | `int` | Minimum execution count |
+| `bench_cut` | `float` | Percentage of outliers to trim (0.0 to 0.5) |
+| `bench_disable_stdout` | `bool` | Mute `print()` output inside the target |
+| `bench_verbose` | `bool` | Include extra stats in `results.print()` |
+| `bench_before` | `callable` | Local setup hook |
+| `bench_after` | `callable` | Local teardown hook |
+
+## Reference
 
 ### `Suite`
 
-#### Attributes
+- `timeout` (float): Default time limit (10s).
+- `max_itr` (int): Default max runs (1000).
+- `min_itr` (int): Default min runs (3).
+- `cut` (float): Default outlier threshold (0.05).
+- `disable_stdout` (bool): Global stdout suppressor.
+- `verbose` (bool): Global verbosity flag.
 
-- `timeout` (float): The number of seconds to run each function before exiting early. Timout is only checked after the end of a function call, a long running or infinite functions will not time out.
-- `max_itr` (int): The maximum number of iterations to run each function. Maximum iterations is recorded function calls after cutting fastest and slowest. `max_itr=1000` with `cut=0.1` will run the function 1250 times and cut the top and bottom 125. Defaults to 1000 runs.
-- `min_itr` (int): The minimum number of iterations to run each function. Takes priority over timeout and defaults to 3 runs.
-- `cut` (float): The percentage of iterations to cut off from each end when calculating average time.
-- `disable_stdout` (bool): If `True`, disables stdout. Defaults to `False`.
-- `verbose` (bool): If `True`, prints additional details for each benchmark test. Defaults to `False`.
+### `BenchmarkResults`
 
+- `print(verbose=None)`: Print results to console. 
+- `to_json(indent=4)`: Export results to JSON.
+- `to_list()`: Export results to list of dicts.
 
-#### Methods
+### `BenchmarkResult`
 
-- `add(func, *args, **kwargs)`: Adds a benchmark test function to the suite.
-- `before(func, *args, **kwargs)`: Provide a function to run before each test.
-- `after(func, *args, **kwargs)`: Provide a function to run after each test.
-- `clear()`: Clears the list of benchmark test functions in the suite.
-- `set_timeout(t)`: Sets the timeout value for each function in the suite.
-- `set_max_itr(n)`: Sets the maximum number of iterations to run each function.
-- `set_min_itr(n)`: Sets the minimum number of iterations to run each function.
-- `set_cut(n)`: Sets the percentage of iterations to cut off from each end when calculating average time.
-- `get_suite()`: Returns a dictionary containing the details of the suite.
+Dataclass containing:
+- `name`: Target name or custom override.
+- `avg`, `std`, `median`, `minimum`, `maximum`: Timing stats in seconds.
+- `itr_ps`: Iterations per second.
+- `iterations`: Total runs.
+- `counted_iterations`: Runs used for stats after trimming outliers.
 
-## 5. Code Example
+## Example
 
 ```python
 from pybencher import Suite
 
-# Define some functions to benchmark
-def foo():
-    x = 0
-    for _ in range(10000):
-        x+=1
+suite = Suite()
 
-def bar():
-    print('hi')
+# 'timeout' here is a function param, not the benchmark limit
+@suite.bench(timeout=0.1, bench_name="Sleepy", bench_verbose=True)
+def test_args(timeout):
+    import time
+    time.sleep(timeout)
 
-def baz():
-    pass
-
-def argskwargs(*args, **kwargs):
-    total = sum(args)
-    for value in kwargs.values():
-        total += value
-    return total
-
-from random import random
-from time import sleep
-def random_sleep():
-    sleep(random()/1000)
-
-
-shared_list_1 = ["hi", 0.5]*10000
-shared_list_2 = [True, 9999999]*10000
-
-def cleanup():
-    shared_list_1.append("ho")
-    shared_list_2.append(False)
-    print(f"Shared list 1 length: {len(shared_list_1)}, Shared list 2 length {len(shared_list_2)}")
-    return shared_list_1.extend(shared_list_2)
-
-def beforeSetup():
-    global shared_list_1, shared_list_2
-    shared_list_1 = ["hi", 0.5]*10000
-    shared_list_2 = [True, 9999999]*10000
-
-def afterCleanup():
-    global shared_list_1, shared_list_2
-    shared_list_1 = []
-    shared_list_2 = []
-
-# Create a new suite
-suite1 = Suite()
-
-# Disable stdout
-suite1.disable_stdout = True
-
-# Add the functions to the suite
-suite1.add(foo)
-suite1.add(bar)
-suite1.add(baz)
-suite1.add(argskwargs, 1, 2, 3, a=4, b=5, c=6)
-suite1.add(argskwargs, 1, 2, 3)
-suite1.add(argskwargs, a=4, b=5, c=6)
-suite1.add(argskwargs)
-suite1.add(random_sleep)
-
-# Create a second suite
-suite2 = Suite()
-
-# Set the maximum number of iterations for the suite
-suite2.set_max_itr(5)
-
-# Set the verbose flag to True to print additional details for each benchmark test
-suite2.verbose = True
-
-# Add the functions to the suite
-suite2.add(cleanup)
-
-# Set functions to run before and after each test function execution
-suite2.before(beforeSetup)
-suite2.after(afterCleanup)
-
-print(suite1.get_suite())
-suite1.run()
-
-print()
-
-print(suite2.get_suite())
-suite2.run()
+results = suite.run()
+results.print()
 ```
 
-### Example output:
-```
-'tests': ['foo()', 'bar()', 'baz()', 'argskwargs(1, 2, 3, a=4, b=5, c=6)', 'argskwargs(1, 2, 3)', 'argskwargs(a=4, b=5, c=6)', 'argskwargs()', 'random_sleep()'], 'timeout': 10, 'max_itr': 1000, 'min_itr': 3, 'cut_percentage': 0.05, 'disable_stdout': True, 'verbose': False, 'before': None, 'after': None}
-Running tests ['foo', 'bar', 'baz', 'argskwargs', 'argskwargs', 'argskwargs', 'argskwargs', 'random_sleep']
-foo: 451us/itr | 2215 itr/s
-bar: 528ns/itr | 1892863 itr/s
-baz: 193ns/itr | 5173308 itr/s
-argskwargs: 776ns/itr | 1288161 itr/s
-argskwargs: 474ns/itr | 2109703 itr/s
-argskwargs: 701ns/itr | 1426736 itr/s
-argskwargs: 408ns/itr | 2447981 itr/s
-random_sleep: 920us/itr | 1086 itr/s
-
-{'tests': ['cleanup()'], 'timeout': 10, 'max_itr': 5, 'min_itr': 3, 'cut_percentage': 0.05, 'disable_stdout': False, 'verbose': True, 'before': 'beforeSetup', 'after': 'afterCleanup'}
-Running tests ['cleanup']
-Shared list 1 length: 20001, Shared list 2 length 20001
-Shared list 1 length: 20001, Shared list 2 length 20001
-Shared list 1 length: 20001, Shared list 2 length 20001
-Shared list 1 length: 20001, Shared list 2 length 20001
-Shared list 1 length: 20001, Shared list 2 length 20001
-cleanup: 313us/itr | 3191 itr/s
-  std: 22.8us
-  median: 323us
-  minimum: 276us
-  maximum: 338us
-  iterations: 5
-  counted iterations: 4
-  total time: 1.59ms
+### Output:
+```text
+Sleepy: 100ms/itr | 10.0 itr/s
+  std:     120us
+  median:  100ms
+  min/max: 99ms / 101ms
+  runs:    10 (10 counted)
+  total:   1.01s
 ```

@@ -1,22 +1,47 @@
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "pybencher"
-version = "1.0.6"
+version = "2.0.0"
 authors = [
   { name="Barnaby Gill", email="barnabasgill@gmail.com" },
 ]
 description = "PyBencher is a Python benchmarking module for benchmarking several python functions at once. PyBencher supports tuneable benchmarking parameters as well as args and kwargs for function calls."
 readme = "README.md"
-requires-python = ">=3.6"
+requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+dependencies = []
 
 [project.urls]
 Homepage = "https://github.com/BarnabasG/pybencher"
 Issues = "https://github.com/BarnabasG/pybencher/issues"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "mypy>=1.15.0",
+    "ruff>=0.9.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pybencher"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.mypy]
+files = ["src", "tests"]
+strict = true
+
+[tool.ruff]
+line-length = 120
+src = ["src", "tests"]
+
+[tool.ruff.lint]

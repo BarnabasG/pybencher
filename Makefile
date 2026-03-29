@@ -1,14 +1,23 @@
-.PHONY:
+.PHONY: build upload test lint mypy clean
 
+# Building and Uploading
 build:
-	del /Q /S .\dist\*
-	python -m build
-	copy .\dist\* .\versions
+	uv build
 
-upload:
-	python -m pip install twine --upgrade
-	python -m twine upload dist/* --verbose
+upload: build
+	uv publish
 
-update:
-	python -m pip install twine --upgrade
-	python -m twine upload --repository pybencher dist/* --verbose
+# Testing and Quality
+test:
+	uv run pytest
+
+lint:
+	uv run ruff check .
+	uv run ruff format --check .
+
+mypy:
+	uv run mypy
+
+# Cleanup
+clean:
+	python -c "import shutil, os; [shutil.rmtree(p) for p in ['dist', 'build', '.pytest_cache', '.mypy_cache', '.ruff_cache', 'src/pybencher.egg-info'] if os.path.exists(p)]"
