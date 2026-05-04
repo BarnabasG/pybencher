@@ -10,7 +10,16 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 @dataclass(frozen=True)
 class BenchmarkResult:
-    """Benchmark execution results and stats."""
+    """Single benchmark result with timing statistics.
+
+    Attributes:
+        name: Target name or custom override.
+        avg, std, median, minimum, maximum: Timing stats in seconds.
+        itr_ps: Iterations per second (after outlier trimming).
+        iterations: Total runs executed.
+        counted_iterations: Runs used for stats after trimming.
+        total_time: Wall-clock time for all runs.
+    """
 
     name: str
     avg: float
@@ -32,7 +41,7 @@ class BenchmarkResult:
 
 
 class BenchmarkResults:
-    """Collection of results with export utilities."""
+    """Iterable collection of BenchmarkResult objects with export utilities."""
 
     def __init__(self, results: List[BenchmarkResult]):
         self._results = results
@@ -53,7 +62,7 @@ class BenchmarkResults:
         return json.dumps(self.to_list(), indent=indent)
 
     def print(self, verbose: Optional[bool] = None) -> None:
-        """Format and print results to stdout."""
+        """Print results to stdout. Pass verbose=True for extended stats."""
         for r in self._results:
             is_verbose = verbose if verbose is not None else r.verbose
             print(f"{r.name}: {self._format_time(r.avg)}/itr | {r.itr_ps:.2f} itr/s")
@@ -144,7 +153,12 @@ class _Function:
 
 
 class Suite:
-    """Benchmarking suite for registering and running tests."""
+    """Benchmarking suite for registering and running tests.
+
+    Args:
+        max_itr: Maximum iterations per benchmark (default 1000).
+        timeout: Time limit in seconds per benchmark (default 10.0).
+    """
 
     def __init__(self, max_itr: int = 1000, timeout: float = 10.0) -> None:
         self.tests: List[_Function] = []
@@ -161,7 +175,10 @@ class Suite:
         self._afterFunc: Optional[_BeforeAfter] = None
 
     def bench(self, *args: Any, **kwargs: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """Decorator to register a benchmark function."""
+        """Decorator to register a benchmark. Pass args/kwargs for the target function.
+
+        Use ``bench_`` prefixed kwargs for config overrides (e.g. bench_timeout=5.0).
+        """
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             self.add(func, *args, **kwargs)
@@ -191,7 +208,7 @@ class Suite:
         self.validate_limit = n
 
     def add(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
-        """Add a function to the suite."""
+        """Register a callable for benchmarking. Equivalent to ``@suite.bench()``."""
         if not callable(func):
             raise TypeError("Benchmark target must be callable")
         self.tests.append(_Function(func, *args, **kwargs))
@@ -303,7 +320,7 @@ class Suite:
         )
 
     def run(self) -> BenchmarkResults:
-        """Run registered tests and return results."""
+        """Execute all registered benchmarks and return a BenchmarkResults collection."""
         self._apply_before_after()
 
         if self.validate_responses and len(self.tests) > 1:
