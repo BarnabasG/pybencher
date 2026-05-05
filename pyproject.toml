@@ -4,11 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pybencher"
-version = "2.1.1"
+version = "2.2.0"
 authors = [
   { name="Barnaby Gill", email="barnabasgill@gmail.com" },
 ]
-description = "PyBencher is a Python benchmarking module for benchmarking several python functions at once. PyBencher supports tuneable benchmarking parameters as well as args and kwargs for function calls."
+description = "PyBencher is a Python benchmarking module for benchmarking several python functions at once."
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers = [
@@ -27,6 +27,7 @@ dev = [
     "pytest>=8.0.0",
     "mypy>=1.15.0",
     "ruff>=0.9.0",
+    "pytest-cov>=7.1.0",
 ]
 
 [tool.hatch.build.targets.wheel]
