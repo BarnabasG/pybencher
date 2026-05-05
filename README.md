@@ -22,13 +22,13 @@ suite = Suite()
 def my_function():
     return sum(range(10000))
 
-# Custom configuration using 'bench_' prefix
-@suite.bench(bench_name="Fast Math", bench_max_itr=5000)
+# Per-benchmark configuration
+@suite.bench(name="Fast Math", max_itr=5000)
 def fast():
     return 1 + 1
 
-# Positional and keyword arguments are passed directly
-@suite.bench(10, 20, bench_name="Add")
+# Function arguments via args / kwargs
+@suite.bench(args=(10, 20), name="Add")
 def add(a, b):
     return a + b
 
@@ -36,7 +36,7 @@ def add(a, b):
 def manual_func(n):
     return sum(range(n))
 
-suite.add(manual_func, 1000, bench_name="Manual Register")
+suite.add(manual_func, args=(1000,), name="Manual Register")
 
 # Run and print results
 results = suite.run()
@@ -45,19 +45,21 @@ results.print()
 
 ## Configuration Overrides
 
-Any setting in the `Suite` can be overridden for a specific benchmark by prefixing it with `bench_`. This ensures that benchmark configuration does not interfere with your function's own parameters (e.g., using `timeout=0.5` as a function argument while setting `bench_timeout=5.0` for the suite).
+Any setting in the `Suite` can be overridden per-benchmark via keyword arguments to `bench()` or `add()`. Function inputs are separated cleanly into the `args` and `kwargs` parameters.
 
 | Override | Type | Description |
 | --- | --- | --- |
-| `bench_name` | `str` | Display name in reports |
-| `bench_timeout` | `float` | Per-test time limit in seconds |
-| `bench_max_itr` | `int` | Maximum execution count |
-| `bench_min_itr` | `int` | Minimum execution count |
-| `bench_cut` | `float` | Percentage of outliers to trim (0.0 to 0.5) |
-| `bench_disable_stdout` | `bool` | Mute `print()` output inside the target |
-| `bench_verbose` | `bool` | Include extra stats in `results.print()` |
-| `bench_before` | `callable` | Local setup hook |
-| `bench_after` | `callable` | Local teardown hook |
+| `name` | `str` | Display name in reports |
+| `timeout` | `float` | Per-test time limit in seconds |
+| `max_itr` | `int` | Maximum execution count |
+| `min_itr` | `int` | Minimum execution count |
+| `cut` | `float` | Percentage of outliers to trim (0.0 to 0.5) |
+| `disable_stdout` | `bool` | Mute `print()` output inside the target |
+| `verbose` | `bool` | Include extra stats in `results.print()` |
+| `before` | `callable` | Local setup hook |
+| `after` | `callable` | Local teardown hook |
+| `args` | `tuple` | Positional arguments for the target function |
+| `kwargs` | `dict` | Keyword arguments for the target function |
 
 ## Reference
 
@@ -95,8 +97,14 @@ from pybencher import Suite
 
 suite = Suite()
 
-# 'timeout' here is a function param, not the benchmark limit
-@suite.bench(timeout=0.1, bench_name="Sleepy", bench_verbose=True)
+# 'timeout' here is a benchmark config override, not a function param
+@suite.bench(args=(0.1,), name="Sleepy", verbose=True)
+def test_sleep(duration):
+    import time
+    time.sleep(duration)
+
+# Function kwargs stay separate from benchmark config
+@suite.bench(kwargs={"timeout": 0.1}, name="Sleepy Alt", verbose=True)
 def test_args(timeout):
     import time
     time.sleep(timeout)

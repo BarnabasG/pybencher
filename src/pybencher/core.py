@@ -104,52 +104,73 @@ class _BeforeAfter:
 class _Function:
     """Benchmark target with configuration and optional hooks."""
 
-    def __init__(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
-        # Configuration overrides
-        self.bench_timeout: Optional[float] = kwargs.pop("bench_timeout", None)
-        self.bench_max_itr: Optional[int] = kwargs.pop("bench_max_itr", None)
-        self.bench_min_itr: Optional[int] = kwargs.pop("bench_min_itr", None)
-        self.bench_cut: Optional[float] = kwargs.pop("bench_cut", None)
-        self.bench_name: Optional[str] = kwargs.pop("bench_name", None)
-        self.bench_disable_stdout: Optional[bool] = kwargs.pop("bench_disable_stdout", None)
-        self.bench_verbose: Optional[bool] = kwargs.pop("bench_verbose", None)
-        self.bench_before: Optional[Callable[..., Any]] = kwargs.pop("bench_before", None)
-        self.bench_after: Optional[Callable[..., Any]] = kwargs.pop("bench_after", None)
-
+    def __init__(
+        self,
+        func: Callable[..., Any],
+        *,
+        args: Tuple[Any, ...] = (),
+        kwargs: Optional[Dict[str, Any]] = None,
+        name: Optional[str] = None,
+        timeout: Optional[float] = None,
+        max_itr: Optional[int] = None,
+        min_itr: Optional[int] = None,
+        cut: Optional[float] = None,
+        disable_stdout: Optional[bool] = None,
+        verbose: Optional[bool] = None,
+        before: Optional[Callable[..., Any]] = None,
+        after: Optional[Callable[..., Any]] = None,
+    ) -> None:
         self.func = func
-        self.before: Optional[_BeforeAfter] = None
-        self.after: Optional[_BeforeAfter] = None
         self.args = args
-        self.kwargs = kwargs
-        self.name = func.__name__
+        self.kwargs: Dict[str, Any] = kwargs if kwargs is not None else {}
+        self.func_name = func.__name__
 
-    def before_after(self, before: Optional[_BeforeAfter] = None, after: Optional[_BeforeAfter] = None) -> None:
+        # Per-benchmark config overrides (None = inherit from Suite)
+        self._display_name = name
+        self._timeout = timeout
+        self._max_itr = max_itr
+        self._min_itr = min_itr
+        self._cut = cut
+        self._disable_stdout = disable_stdout
+        self._verbose = verbose
+        self._before_fn = before
+        self._after_fn = after
+
+        # Resolved hooks (set by before_after())
+        self.before_hook: Optional[_BeforeAfter] = None
+        self.after_hook: Optional[_BeforeAfter] = None
+
+    def apply_hooks(
+        self,
+        before: Optional[_BeforeAfter] = None,
+        after: Optional[_BeforeAfter] = None,
+    ) -> None:
         """Apply test-specific or suite-level hooks."""
-        self.before = _BeforeAfter(self.bench_before) if self.bench_before else before
-        self.after = _BeforeAfter(self.bench_after) if self.bench_after else after
+        self.before_hook = _BeforeAfter(self._before_fn) if self._before_fn else before
+        self.after_hook = _BeforeAfter(self._after_fn) if self._after_fn else after
 
     def __call__(self) -> Tuple[float, Any]:
         """Run function once and return elapsed time."""
-        if self.before:
-            self.before()
+        if self.before_hook:
+            self.before_hook()
         start = perf_counter()
         res = self.func(*self.args, **self.kwargs)
         duration = perf_counter() - start
-        if self.after:
-            self.after()
+        if self.after_hook:
+            self.after_hook()
         return duration, res
 
     def __hash__(self) -> int:
-        return hash(tuple([self.name, self.args, tuple(self.kwargs.items())]))
+        return hash(tuple([self.func_name, self.args, tuple(self.kwargs.items())]))
 
     def pretty(self) -> str:
         """String representation of the call."""
-        if self.bench_name:
-            return self.bench_name
+        if self._display_name:
+            return self._display_name
         args_str = ", ".join([str(a) for a in self.args])
         kwargs_str = ", ".join([f"{k}={v}" for k, v in self.kwargs.items()])
         sep = ", " if self.args and self.kwargs else ""
-        return f"{self.name}({args_str}{sep}{kwargs_str})"
+        return f"{self.func_name}({args_str}{sep}{kwargs_str})"
 
 
 class Suite:
@@ -174,14 +195,42 @@ class Suite:
         self._beforeFunc: Optional[_BeforeAfter] = None
         self._afterFunc: Optional[_BeforeAfter] = None
 
-    def bench(self, *args: Any, **kwargs: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """Decorator to register a benchmark. Pass args/kwargs for the target function.
+    def bench(
+        self,
+        *,
+        args: Tuple[Any, ...] = (),
+        kwargs: Optional[Dict[str, Any]] = None,
+        name: Optional[str] = None,
+        timeout: Optional[float] = None,
+        max_itr: Optional[int] = None,
+        min_itr: Optional[int] = None,
+        cut: Optional[float] = None,
+        disable_stdout: Optional[bool] = None,
+        verbose: Optional[bool] = None,
+        before: Optional[Callable[..., Any]] = None,
+        after: Optional[Callable[..., Any]] = None,
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        """Decorator to register a benchmark.
 
-        Use ``bench_`` prefixed kwargs for config overrides (e.g. bench_timeout=5.0).
+        Pass function inputs via ``args`` and ``kwargs``.
+        All other parameters are benchmark configuration overrides.
         """
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-            self.add(func, *args, **kwargs)
+            self.add(
+                func,
+                args=args,
+                kwargs=kwargs,
+                name=name,
+                timeout=timeout,
+                max_itr=max_itr,
+                min_itr=min_itr,
+                cut=cut,
+                disable_stdout=disable_stdout,
+                verbose=verbose,
+                before=before,
+                after=after,
+            )
             return func
 
         return decorator
@@ -207,11 +256,41 @@ class Suite:
     def set_validate_limit(self, n: int) -> None:
         self.validate_limit = n
 
-    def add(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
+    def add(
+        self,
+        func: Callable[..., Any],
+        *,
+        args: Tuple[Any, ...] = (),
+        kwargs: Optional[Dict[str, Any]] = None,
+        name: Optional[str] = None,
+        timeout: Optional[float] = None,
+        max_itr: Optional[int] = None,
+        min_itr: Optional[int] = None,
+        cut: Optional[float] = None,
+        disable_stdout: Optional[bool] = None,
+        verbose: Optional[bool] = None,
+        before: Optional[Callable[..., Any]] = None,
+        after: Optional[Callable[..., Any]] = None,
+    ) -> None:
         """Register a callable for benchmarking. Equivalent to ``@suite.bench()``."""
         if not callable(func):
             raise TypeError("Benchmark target must be callable")
-        self.tests.append(_Function(func, *args, **kwargs))
+        self.tests.append(
+            _Function(
+                func,
+                args=args,
+                kwargs=kwargs,
+                name=name,
+                timeout=timeout,
+                max_itr=max_itr,
+                min_itr=min_itr,
+                cut=cut,
+                disable_stdout=disable_stdout,
+                verbose=verbose,
+                before=before,
+                after=after,
+            )
+        )
 
     def before(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
         """Global pre-benchmark hook."""
@@ -238,28 +317,34 @@ class Suite:
             "after": self._afterFunc.name if self._afterFunc else None,
         }
 
-    def _apply_before_after(self) -> None:
+    def _apply_hooks(self) -> None:
         for t in self.tests:
-            t.before_after(self._beforeFunc, self._afterFunc)
+            t.apply_hooks(self._beforeFunc, self._afterFunc)
 
     def _run_test(self, func: _Function) -> Tuple[List[float], int, List[Any], int]:
-        times = []
+        times: List[float] = []
         total = 0.0
         runs = 0
         results_seq: List[Any] = []
         tail_hash = 0
 
         # Configuration priority: test override > suite default
-        max_itr = func.bench_max_itr if func.bench_max_itr is not None else self.max_itr
-        timeout = func.bench_timeout if func.bench_timeout is not None else self.timeout
-        min_itr = func.bench_min_itr if func.bench_min_itr is not None else self.min_itr
-        cut = func.bench_cut if func.bench_cut is not None else self.cut
+        max_itr = func._max_itr if func._max_itr is not None else self.max_itr
+        timeout = func._timeout if func._timeout is not None else self.timeout
+        min_itr = func._min_itr if func._min_itr is not None else self.min_itr
+        cut = func._cut if func._cut is not None else self.cut
 
         # Warm-up phase
         for _ in range(self.warmup_itr):
             func()
 
-        actual_max = int(max_itr / (1 - (2 * cut)))
+        # actual_max can be negative if cut >= 0.5, ensure it's at least 1 if max_itr > 0
+        denominator = 1 - (2 * cut)
+        if denominator <= 0:
+            actual_max = max_itr
+        else:
+            actual_max = int(max_itr / denominator)
+
         for _ in range(actual_max):
             t, res = func()
             times.append(t)
@@ -277,12 +362,29 @@ class Suite:
         return times, runs, results_seq, tail_hash
 
     def _get_output_details(self, func: _Function, times: List[float], runs: int) -> BenchmarkResult:
+        if not times:
+            return BenchmarkResult(
+                name=func.pretty(),
+                avg=0.0,
+                std=0.0,
+                median=0.0,
+                minimum=0.0,
+                maximum=0.0,
+                itr_ps=0.0,
+                iterations=0,
+                counted_iterations=0,
+                total_time=0.0,
+                verbose=func._verbose if func._verbose is not None else self.verbose,
+            )
+
         s = sorted(times)
         minimum, maximum = s[0], s[-1]
 
-        cut = func.bench_cut if func.bench_cut is not None else self.cut
+        cut = func._cut if func._cut is not None else self.cut
         start, end = int(runs * cut), int(runs * (1 - cut))
-        s = s[start:end] if start < end else s
+        s = s[start:end]
+
+        verbose = func._verbose if func._verbose is not None else self.verbose
 
         if not s:
             return BenchmarkResult(
@@ -296,7 +398,7 @@ class Suite:
                 iterations=runs,
                 counted_iterations=0,
                 total_time=sum(times),
-                verbose=func.bench_verbose if func.bench_verbose is not None else self.verbose,
+                verbose=verbose,
             )
 
         avg = sum(s) / len(s)
@@ -316,12 +418,12 @@ class Suite:
             iterations=runs,
             counted_iterations=len(s),
             total_time=sum(times),
-            verbose=func.bench_verbose if func.bench_verbose is not None else self.verbose,
+            verbose=verbose,
         )
 
     def run(self) -> BenchmarkResults:
         """Execute all registered benchmarks and return a BenchmarkResults collection."""
-        self._apply_before_after()
+        self._apply_hooks()
 
         if self.validate_responses and len(self.tests) > 1:
             # Check for inconsistent args/kwargs
@@ -340,7 +442,7 @@ class Suite:
         all_sequences: List[Tuple[List[Any], int]] = []
 
         for func in self.tests:
-            mute = func.bench_disable_stdout if func.bench_disable_stdout is not None else self.disable_stdout
+            mute = func._disable_stdout if func._disable_stdout is not None else self.disable_stdout
             if mute:
                 with io.StringIO() as buf, redirect_stdout(buf):
                     times, runs, seq, thash = self._run_test(func)

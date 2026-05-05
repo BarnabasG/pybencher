@@ -11,12 +11,16 @@ upload: build
 test:
 	uv run pytest
 
-lint:
-	uv run ruff check .
-	uv run ruff format --check .
+cover:
+	uv run pytest tests/ --cov src --cov-report term-missing
+
+ruff:
+	uv run ruff format && uv run ruff check
 
 mypy:
 	uv run mypy
+
+format: ruff mypy
 
 # Cleanup
 clean:
