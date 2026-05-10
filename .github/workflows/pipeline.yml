@@ -45,7 +45,7 @@ jobs:
             
       - name: Run tests
         run: |
-          uv run pytest
+          uv run pytest --cov
 
   publish:
     name: Publish to PyPI

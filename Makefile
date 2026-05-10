@@ -12,7 +12,7 @@ test:
 	uv run pytest
 
 cover:
-	uv run pytest tests/ --cov src --cov-report term-missing
+	uv run pytest --cov
 
 ruff:
 	uv run ruff format && uv run ruff check
