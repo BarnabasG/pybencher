@@ -85,6 +85,7 @@ Any setting in the `Suite` can be overridden per-benchmark via keyword arguments
 
 - `print(verbose=None)`: Print results to console. 
 - `to_json(indent=4)`: Export results to JSON.
+- `to_markdown()`: Export results as a GitHub-flavored markdown table.
 - `to_list()`: Export results to list of dicts.
 
 ### `BenchmarkResult`

@@ -66,6 +66,29 @@ class BenchmarkResults:
     def to_json(self, indent: int = 4) -> str:
         return json.dumps(self.to_list(), indent=indent)
 
+    def to_markdown(self) -> str:
+        """Export results as a GitHub-flavored markdown table."""
+        headers = ["Name", "Average", "Median", "Std Dev", "Min", "Max", "Itr/s", "Total Runs"]
+        lines = [
+            f"| {' | '.join(headers)} |",
+            f"| :--- | {' | '.join(['---:' for _ in range(len(headers) - 1)])} |",
+        ]
+
+        for r in self._results:
+            row = [
+                r.name,
+                self._format_time(r.avg),
+                self._format_time(r.median),
+                self._format_time(r.std),
+                self._format_time(r.minimum),
+                self._format_time(r.maximum),
+                f"{r.itr_ps:,.2f}",
+                f"{r.iterations:,}",
+            ]
+            lines.append(f"| {' | '.join(row)} |")
+
+        return "\n".join(lines)
+
     def print(self, verbose: Optional[bool] = None) -> None:
         """Print results to stdout. Pass verbose=True for extended stats."""
         for r in self._results:
