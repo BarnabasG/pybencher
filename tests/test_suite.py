@@ -7,9 +7,10 @@ from pybencher import Suite
 def test_initialization() -> None:
     """Default values test."""
     suite = Suite()
+    suite.set_batch_size(1)
     assert suite.tests == []
     assert suite.timeout == 10
-    assert suite.max_itr == 1000
+    assert suite.max_samples == 1000
 
 
 def test_add_function() -> None:
@@ -19,6 +20,7 @@ def test_add_function() -> None:
         pass
 
     suite = Suite()
+    suite.set_batch_size(1)
     suite.add(foo)
     assert len(suite.tests) == 1
     assert suite.tests[0].func_name == "foo"
@@ -27,6 +29,7 @@ def test_add_function() -> None:
 def test_decorator_registration() -> None:
     """Decorator registration."""
     suite = Suite()
+    suite.set_batch_size(1)
 
     @suite.bench()
     def foo() -> None:
@@ -39,6 +42,7 @@ def test_decorator_registration() -> None:
 def test_name_override() -> None:
     """Custom benchmark name."""
     suite = Suite()
+    suite.set_batch_size(1)
 
     @suite.bench(name="Custom Name")
     def foo() -> None:
@@ -51,6 +55,7 @@ def test_name_override() -> None:
 def test_decorator_arguments() -> None:
     """Passing positional and keyword arguments."""
     suite = Suite()
+    suite.set_batch_size(1)
 
     @suite.bench(args=(1, 2), kwargs={"c": 3})
     def foo(a: int, b: int, c: int) -> int:
@@ -62,9 +67,10 @@ def test_decorator_arguments() -> None:
 
 def test_config_override() -> None:
     """Per-test configuration priority."""
-    suite = Suite(max_itr=100)
+    suite = Suite(max_samples=100)
+    suite.set_batch_size(1)
 
-    @suite.bench(max_itr=5, cut=0.0)
+    @suite.bench(max_samples=5, cut=0.0)
     def foo() -> None:
         pass
 
@@ -75,7 +81,8 @@ def test_config_override() -> None:
 def test_function_args_separated_from_config() -> None:
     """Ensure function args and config are cleanly separated."""
     suite = Suite()
-    suite.set_max_itr(1)
+    suite.set_batch_size(1)
+    suite.set_max_samples(1)
 
     @suite.bench(kwargs={"timeout": 0.123}, timeout=5.0)
     def foo(timeout: float) -> float:
@@ -88,7 +95,8 @@ def test_function_args_separated_from_config() -> None:
 def test_stdout_suppression(capsys: pytest.CaptureFixture[str]) -> None:
     """Stdout muting."""
     suite = Suite()
-    suite.set_max_itr(1)
+    suite.set_batch_size(1)
+    suite.set_max_samples(1)
 
     @suite.bench(disable_stdout=True)
     def noisy() -> None:
@@ -101,7 +109,8 @@ def test_stdout_suppression(capsys: pytest.CaptureFixture[str]) -> None:
 def test_run_data_return() -> None:
     """Programmatic results access."""
     suite = Suite()
-    suite.set_max_itr(5)
+    suite.set_batch_size(1)
+    suite.set_max_samples(5)
     suite.set_cut(0.0)
 
     def foo() -> int:
@@ -128,7 +137,8 @@ def test_before_after_hooks(results_list: list[str]) -> None:
         results_list.append("foo")
 
     suite = Suite()
-    suite.set_max_itr(1)
+    suite.set_batch_size(1)
+    suite.set_max_samples(1)
     suite.set_cut(0.0)
     suite.before(before)
     suite.after(after)
@@ -141,6 +151,7 @@ def test_before_after_hooks(results_list: list[str]) -> None:
 def test_get_suite_metadata() -> None:
     """Suite configuration inspection."""
     suite = Suite()
+    suite.set_batch_size(1)
 
     def foo() -> None:
         pass
@@ -148,13 +159,14 @@ def test_get_suite_metadata() -> None:
     suite.add(foo)
     details = suite.get_suite()
     assert details["tests"] == ["foo()"]
-    assert details["max_itr"] == 1000
+    assert details["max_samples"] == 1000
 
 
 def test_result_serialization() -> None:
     """to_dict, to_list, to_json, and repr."""
     suite = Suite()
-    suite.set_max_itr(3)
+    suite.set_batch_size(1)
+    suite.set_max_samples(3)
     suite.set_cut(0.0)
     suite.add(lambda: 1, name="ser")
     results = suite.run()
@@ -174,7 +186,8 @@ def test_result_serialization() -> None:
 def test_results_iteration() -> None:
     """__iter__ and __len__."""
     suite = Suite()
-    suite.set_max_itr(1)
+    suite.set_batch_size(1)
+    suite.set_max_samples(1)
     suite.set_cut(0.0)
     suite.add(lambda: 1, name="a")
     suite.add(lambda: 2, name="b")
@@ -188,7 +201,8 @@ def test_results_iteration() -> None:
 def test_print_output(capsys: pytest.CaptureFixture[str]) -> None:
     """print() with verbose and non-verbose."""
     suite = Suite()
-    suite.set_max_itr(3)
+    suite.set_batch_size(1)
+    suite.set_max_samples(3)
     suite.set_cut(0.0)
     suite.add(lambda: 1, name="p", verbose=True)
     results = suite.run()
@@ -201,7 +215,7 @@ def test_print_output(capsys: pytest.CaptureFixture[str]) -> None:
 
     # Non-verbose
     suite2 = Suite()
-    suite2.set_max_itr(3)
+    suite2.set_max_samples(3)
     suite2.set_cut(0.0)
     suite2.add(lambda: 1, name="q")
     results2 = suite2.run()
@@ -214,7 +228,8 @@ def test_print_output(capsys: pytest.CaptureFixture[str]) -> None:
 def test_print_verbose_override(capsys: pytest.CaptureFixture[str]) -> None:
     """print(verbose=True) overrides per-result setting."""
     suite = Suite()
-    suite.set_max_itr(3)
+    suite.set_batch_size(1)
+    suite.set_max_samples(3)
     suite.set_cut(0.0)
     suite.add(lambda: 1, name="v")
     results = suite.run()
@@ -224,11 +239,12 @@ def test_print_verbose_override(capsys: pytest.CaptureFixture[str]) -> None:
     assert "std:" in out
 
 
-def test_set_timeout_and_min_itr() -> None:
-    """set_timeout and set_min_itr setters."""
+def test_set_timeout_and_min_samples() -> None:
+    """set_timeout and set_min_samples setters."""
     suite = Suite()
+    suite.set_batch_size(1)
     suite.set_timeout(0.001)
-    suite.set_min_itr(1)
+    suite.set_min_samples(1)
     suite.set_cut(0.0)
     suite.add(lambda: 1)
     results = suite.run()
@@ -238,6 +254,7 @@ def test_set_timeout_and_min_itr() -> None:
 def test_clear() -> None:
     """clear() empties the test list."""
     suite = Suite()
+    suite.set_batch_size(1)
     suite.add(lambda: 1)
     assert len(suite.tests) == 1
     suite.clear()
@@ -247,6 +264,7 @@ def test_clear() -> None:
 def test_add_non_callable() -> None:
     """Passing a non-callable raises TypeError."""
     suite = Suite()
+    suite.set_batch_size(1)
     with pytest.raises(TypeError, match="callable"):
         suite.add(42)  # type: ignore[arg-type]
 
@@ -259,9 +277,10 @@ def test_timeout_exit() -> None:
         time.sleep(0.01)
 
     suite = Suite()
+    suite.set_batch_size(1)
     suite.set_timeout(0.03)
-    suite.set_max_itr(10000)
-    suite.set_min_itr(1)
+    suite.set_max_samples(10000)
+    suite.set_min_samples(1)
     suite.set_cut(0.0)
     suite.add(slow)
     results = suite.run()
@@ -296,10 +315,11 @@ def test_format_time_large(seconds: float, expected: str) -> None:
 def test_empty_times_branch() -> None:
     """_get_output_details when no runs were performed."""
     suite = Suite()
+    suite.set_batch_size(1)
     from pybencher.core import _Function
 
     func = _Function(lambda: 1)
-    res = suite._get_output_details(func, [], 0)
+    res = suite._get_output_details(func, [], 0, 1)
     assert res.avg == 0.0
     assert res.iterations == 0
 
@@ -307,7 +327,8 @@ def test_empty_times_branch() -> None:
 def test_empty_stats_branch() -> None:
     """_get_output_details when the cut removes all iterations."""
     suite = Suite()
-    suite.set_max_itr(1)
+    suite.set_batch_size(1)
+    suite.set_max_samples(1)
     suite.set_cut(0.6)
     suite.add(lambda: 1)
     results = suite.run()
@@ -328,9 +349,10 @@ def test_validate_responses_tail_hash_failure() -> None:
         return f
 
     suite = Suite()
+    suite.set_batch_size(1)
     suite.set_validate_responses(True)
     suite.set_validate_limit(5)
-    suite.set_max_itr(20)
+    suite.set_max_samples(20)
     suite.set_cut(0.0)
 
     suite.add(get_func(100), name="f1")
@@ -348,9 +370,10 @@ def results_list() -> list[str]:
 def test_validate_responses_unhashable_type() -> None:
     """Verify that unhashable types do not raise TypeError during tail hashing."""
     suite = Suite()
+    suite.set_batch_size(1)
     suite.set_validate_responses(True)
     suite.set_validate_limit(1)
-    suite.set_max_itr(5)
+    suite.set_max_samples(5)
     suite.set_cut(0.0)
 
     # Returns a list which is unhashable
@@ -365,9 +388,10 @@ def test_validate_responses_unhashable_type() -> None:
 def test_validate_responses_unhashable_type_mismatch() -> None:
     """Verify that unhashable types with mismatched values raise ValueError."""
     suite = Suite()
+    suite.set_batch_size(1)
     suite.set_validate_responses(True)
     suite.set_validate_limit(1)
-    suite.set_max_itr(5)
+    suite.set_max_samples(5)
     suite.set_cut(0.0)
 
     # First item to match, but tail hash mismatch
@@ -393,7 +417,8 @@ def test_disable_gc_feature() -> None:
     import gc
 
     suite = Suite()
-    suite.set_max_itr(1)
+    suite.set_batch_size(1)
+    suite.set_max_samples(1)
     suite.set_cut(0.0)
 
     gc_status = []
@@ -412,7 +437,8 @@ def test_disable_gc_feature() -> None:
 
 def test_batch_size_feature() -> None:
     suite = Suite()
-    suite.set_max_itr(1)
+    suite.set_batch_size(1)
+    suite.set_max_samples(1)
     suite.set_cut(0.0)
 
     call_count = []
@@ -423,7 +449,7 @@ def test_batch_size_feature() -> None:
 
     results = suite.run()
 
-    assert results[0].iterations == 1
+    assert results[0].iterations == 5
     assert len(call_count) == 5
 
 
@@ -431,9 +457,10 @@ def test_warmup_timeout() -> None:
     import time
 
     suite = Suite()
-    suite.set_warmup_itr(100)
+    suite.set_batch_size(1)
+    suite.set_warmup_samples(100)
     suite.set_timeout(0.05)
-    suite.set_max_itr(1)
+    suite.set_max_samples(1)
     suite.set_cut(0.0)
 
     with pytest.warns(UserWarning, match="Warmup phase for 'slow_warmup' exceeded timeout"):

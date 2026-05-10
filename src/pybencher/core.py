@@ -1,5 +1,6 @@
 import gc
 import io
+import sys
 import json
 import warnings
 from contextlib import redirect_stdout
@@ -116,13 +117,14 @@ class _Function:
         kwargs: Optional[Dict[str, Any]] = None,
         name: Optional[str] = None,
         timeout: Optional[float] = None,
-        max_itr: Optional[int] = None,
-        min_itr: Optional[int] = None,
+        max_samples: Optional[int] = None,
+        min_samples: Optional[int] = None,
         cut: Optional[float] = None,
         disable_stdout: Optional[bool] = None,
         verbose: Optional[bool] = None,
         disable_gc: Optional[bool] = None,
         batch_size: Optional[int] = None,
+        live_output: Optional[bool] = None,
         before: Optional[Callable[..., Any]] = None,
         after: Optional[Callable[..., Any]] = None,
     ) -> None:
@@ -131,16 +133,17 @@ class _Function:
         self.kwargs: Dict[str, Any] = kwargs if kwargs is not None else {}
         self.func_name = func.__name__
 
-        # Per-benchmark config overrides (None = inherit from Suite)
+        # Config overrides (None = inherit from Suite)
         self._display_name = name
         self._timeout = timeout
-        self._max_itr = max_itr
-        self._min_itr = min_itr
+        self._max_samples = max_samples
+        self._min_samples = min_samples
         self._cut = cut
         self._disable_stdout = disable_stdout
         self._verbose = verbose
         self._disable_gc = disable_gc
         self._batch_size = batch_size
+        self._live_output = live_output
         self._before_fn = before
         self._after_fn = after
 
@@ -157,15 +160,18 @@ class _Function:
         self.before_hook = _BeforeAfter(self._before_fn) if self._before_fn else before
         self.after_hook = _BeforeAfter(self._after_fn) if self._after_fn else after
 
-    def __call__(self, default_batch_size: int = 1) -> Tuple[float, Any]:
+    def __call__(self, default_batch_size: int = 0) -> Tuple[float, Any]:
         """Run function once (or batch_size times) and return elapsed time."""
         if self.before_hook:
             self.before_hook()
 
         batch_size = self._batch_size if self._batch_size is not None else default_batch_size
+        if batch_size == 0:
+            batch_size = 1
+
         start = perf_counter()
 
-        # Micro-benchmark overhead amortization
+        # Amortize overhead for micro-benchmarks
         if batch_size > 1:
             for _ in range(batch_size):
                 res = self.func(*self.args, **self.kwargs)
@@ -196,21 +202,22 @@ class Suite:
     """Benchmarking suite for registering and running tests.
 
     Args:
-        max_itr: Maximum iterations per benchmark (default 1000).
+        max_samples: Maximum statistical samples per benchmark (default 1000).
         timeout: Time limit in seconds per benchmark (default 10.0).
     """
 
-    def __init__(self, max_itr: int = 1000, timeout: float = 10.0) -> None:
+    def __init__(self, max_samples: int = 1000, timeout: float = 10.0) -> None:
         self.tests: List[_Function] = []
         self.timeout = timeout
-        self.max_itr = max_itr
-        self.min_itr = 3
+        self.max_samples = max_samples
+        self.min_samples = 3
         self.cut = 0.05
         self.disable_stdout = False
         self.verbose = False
         self.disable_gc = False
-        self.batch_size = 1
-        self.warmup_itr = 0
+        self.batch_size = 0
+        self.live_output = True
+        self.warmup_samples = 0
         self.validate_responses = False
         self.validate_limit = 5
         self._beforeFunc: Optional[_BeforeAfter] = None
@@ -223,13 +230,14 @@ class Suite:
         kwargs: Optional[Dict[str, Any]] = None,
         name: Optional[str] = None,
         timeout: Optional[float] = None,
-        max_itr: Optional[int] = None,
-        min_itr: Optional[int] = None,
+        max_samples: Optional[int] = None,
+        min_samples: Optional[int] = None,
         cut: Optional[float] = None,
         disable_stdout: Optional[bool] = None,
         verbose: Optional[bool] = None,
         disable_gc: Optional[bool] = None,
         batch_size: Optional[int] = None,
+        live_output: Optional[bool] = None,
         before: Optional[Callable[..., Any]] = None,
         after: Optional[Callable[..., Any]] = None,
     ) -> Callable[[Callable[P, R]], Callable[P, R]]:
@@ -246,13 +254,14 @@ class Suite:
                 kwargs=kwargs,
                 name=name,
                 timeout=timeout,
-                max_itr=max_itr,
-                min_itr=min_itr,
+                max_samples=max_samples,
+                min_samples=min_samples,
                 cut=cut,
                 disable_stdout=disable_stdout,
                 verbose=verbose,
                 disable_gc=disable_gc,
                 batch_size=batch_size,
+                live_output=live_output,
                 before=before,
                 after=after,
             )
@@ -263,23 +272,29 @@ class Suite:
     def set_timeout(self, t: float) -> None:
         self.timeout = t
 
-    def set_max_itr(self, n: int) -> None:
-        self.max_itr = n
+    def set_max_samples(self, n: int) -> None:
+        self.max_samples = n
 
-    def set_min_itr(self, n: int) -> None:
-        self.min_itr = n
+    def set_min_samples(self, n: int) -> None:
+        self.min_samples = n
 
     def set_cut(self, n: float) -> None:
         self.cut = n
 
-    def set_warmup_itr(self, n: int) -> None:
-        self.warmup_itr = n
+    def set_warmup_samples(self, n: int) -> None:
+        self.warmup_samples = n
 
     def set_validate_responses(self, val: bool) -> None:
         self.validate_responses = val
 
     def set_validate_limit(self, n: int) -> None:
         self.validate_limit = n
+
+    def set_batch_size(self, n: int) -> None:
+        self.batch_size = n
+
+    def set_live_output(self, val: bool) -> None:
+        self.live_output = val
 
     def add(
         self,
@@ -289,13 +304,14 @@ class Suite:
         kwargs: Optional[Dict[str, Any]] = None,
         name: Optional[str] = None,
         timeout: Optional[float] = None,
-        max_itr: Optional[int] = None,
-        min_itr: Optional[int] = None,
+        max_samples: Optional[int] = None,
+        min_samples: Optional[int] = None,
         cut: Optional[float] = None,
         disable_stdout: Optional[bool] = None,
         verbose: Optional[bool] = None,
         disable_gc: Optional[bool] = None,
         batch_size: Optional[int] = None,
+        live_output: Optional[bool] = None,
         before: Optional[Callable[..., Any]] = None,
         after: Optional[Callable[..., Any]] = None,
     ) -> None:
@@ -309,13 +325,14 @@ class Suite:
                 kwargs=kwargs,
                 name=name,
                 timeout=timeout,
-                max_itr=max_itr,
-                min_itr=min_itr,
+                max_samples=max_samples,
+                min_samples=min_samples,
                 cut=cut,
                 disable_stdout=disable_stdout,
                 verbose=verbose,
                 disable_gc=disable_gc,
                 batch_size=batch_size,
+                live_output=live_output,
                 before=before,
                 after=after,
             )
@@ -337,13 +354,14 @@ class Suite:
         return {
             "tests": [t.pretty() for t in self.tests],
             "timeout": self.timeout,
-            "max_itr": self.max_itr,
-            "min_itr": self.min_itr,
+            "max_samples": self.max_samples,
+            "min_samples": self.min_samples,
             "cut_percentage": self.cut,
             "disable_stdout": self.disable_stdout,
             "verbose": self.verbose,
             "disable_gc": self.disable_gc,
             "batch_size": self.batch_size,
+            "live_output": self.live_output,
             "before": self._beforeFunc.name if self._beforeFunc else None,
             "after": self._afterFunc.name if self._afterFunc else None,
         }
@@ -352,7 +370,7 @@ class Suite:
         for t in self.tests:
             t.apply_hooks(self._beforeFunc, self._afterFunc)
 
-    def _run_test(self, func: _Function) -> Tuple[List[float], int, List[Any], int]:
+    def _run_test(self, func: _Function, mute: bool = False) -> Tuple[List[float], int, List[Any], int, int]:
         times: List[float] = []
         total = 0.0
         runs = 0
@@ -360,40 +378,57 @@ class Suite:
         tail_hash = 0
         _is_hashable: Optional[bool] = None
 
-        # Configuration priority: test override > suite default
-        max_itr = func._max_itr if func._max_itr is not None else self.max_itr
+        # Configuration priority: test > suite
+        max_samples = func._max_samples if func._max_samples is not None else self.max_samples
         timeout = func._timeout if func._timeout is not None else self.timeout
-        min_itr = func._min_itr if func._min_itr is not None else self.min_itr
+        min_samples = func._min_samples if func._min_samples is not None else self.min_samples
         cut = func._cut if func._cut is not None else self.cut
         disable_gc = func._disable_gc if func._disable_gc is not None else self.disable_gc
+        batch_size = func._batch_size if func._batch_size is not None else self.batch_size
+        live_output = (
+            func._live_output if getattr(func, "_live_output", None) is not None else getattr(self, "live_output", True)
+        )
 
-        # Warm-up phase
+        # Calibrate batch size
+        if batch_size == 0:
+            bs = 1
+            t, _ = func(default_batch_size=bs)
+            # Scale until batch takes ~2ms (max 1M) to amortize timer overhead
+            while t * bs < 0.002 and bs < 1_000_000:
+                bs *= 10
+                t, _ = func(default_batch_size=bs)
+            batch_size = bs
+
+        # Warm-up
         warmup_start = perf_counter()
-        for _ in range(self.warmup_itr):
-            func(default_batch_size=self.batch_size)
+        for _ in range(self.warmup_samples):
+            func(default_batch_size=batch_size)
             if perf_counter() - warmup_start > timeout:
                 warnings.warn(
                     f"Warmup phase for '{func.pretty()}' exceeded timeout ({timeout}s), aborting warmup early."
                 )
                 break
 
-        # actual_max can be negative if cut >= 0.5, ensure it's at least 1 if max_itr > 0
+        # Adjust for outlier trimming (cut)
         denominator = 1 - (2 * cut)
         if denominator <= 0:
-            actual_max = max_itr
+            actual_max = max_samples
         else:
-            actual_max = int(max_itr / denominator)
+            actual_max = int(max_samples / denominator)
 
         if disable_gc:
             gc_was_enabled = gc.isenabled()
             gc.disable()
 
         try:
+            loop_start = perf_counter()
             for _ in range(actual_max):
-                t, res = func(default_batch_size=self.batch_size)
+                t, res = func(default_batch_size=batch_size)
                 times.append(t)
-                total += t
                 runs += 1
+
+                # Approx time (faster than calling perf_counter every run)
+                total += t * batch_size
 
                 if self.validate_responses:
                     if len(results_seq) < self.validate_limit:
@@ -411,15 +446,28 @@ class Suite:
                         else:
                             tail_hash = hash((tail_hash, repr(res)))
 
-                if total > timeout and runs >= min_itr:
+                elapsed = perf_counter() - loop_start
+                if live_output and not mute:
+                    # Live status update
+                    sys.stdout.write(
+                        f"\rBenchmarking {func.pretty()}... {runs * batch_size:,} iterations ({elapsed:.2f}s elapsed)"
+                    )
+                    sys.stdout.flush()
+
+                if elapsed > timeout and runs >= min_samples:
                     break
         finally:
             if disable_gc and gc_was_enabled:
                 gc.enable()
 
-        return times, runs, results_seq, tail_hash
+        if live_output and not mute:
+            # Preserve final status line
+            sys.stdout.write("\n")
+            sys.stdout.flush()
 
-    def _get_output_details(self, func: _Function, times: List[float], runs: int) -> BenchmarkResult:
+        return times, runs, results_seq, tail_hash, batch_size
+
+    def _get_output_details(self, func: _Function, times: List[float], runs: int, batch_size: int) -> BenchmarkResult:
         if not times:
             return BenchmarkResult(
                 name=func.pretty(),
@@ -453,9 +501,9 @@ class Suite:
                 minimum=minimum,
                 maximum=maximum,
                 itr_ps=0.0,
-                iterations=runs,
+                iterations=runs * batch_size,
                 counted_iterations=0,
-                total_time=sum(times),
+                total_time=sum(t * batch_size for t in times),
                 verbose=verbose,
             )
 
@@ -473,9 +521,9 @@ class Suite:
             minimum=minimum,
             maximum=maximum,
             itr_ps=itrps,
-            iterations=runs,
-            counted_iterations=len(s),
-            total_time=sum(times),
+            iterations=runs * batch_size,
+            counted_iterations=len(s) * batch_size,
+            total_time=sum(t * batch_size for t in times),
             verbose=verbose,
         )
 
@@ -484,7 +532,7 @@ class Suite:
         self._apply_hooks()
 
         if self.validate_responses and len(self.tests) > 1:
-            # Check for inconsistent args/kwargs
+            # Warn if args mismatch during validation
             first_args = (self.tests[0].args, self.tests[0].kwargs)
             for t in self.tests[1:]:
                 if (t.args, t.kwargs) != first_args:
@@ -503,24 +551,24 @@ class Suite:
             mute = func._disable_stdout if func._disable_stdout is not None else self.disable_stdout
             if mute:
                 with io.StringIO() as buf, redirect_stdout(buf):
-                    times, runs, seq, thash = self._run_test(func)
+                    times, runs, seq, thash, batch_size = self._run_test(func, mute=mute)
             else:
-                times, runs, seq, thash = self._run_test(func)
+                times, runs, seq, thash, batch_size = self._run_test(func, mute=mute)
 
             all_sequences.append((seq, thash))
-            results.append(self._get_output_details(func, times, runs))
+            results.append(self._get_output_details(func, times, runs, batch_size))
 
         if self.validate_responses and len(all_sequences) > 1:
             first_seq, first_hash = all_sequences[0]
             for i, (seq, thash) in enumerate(all_sequences[1:], 1):
-                # Compare sequences up to minimum length
+                # Compare head sequences
                 min_len = min(len(first_seq), len(seq))
                 if first_seq[:min_len] != seq[:min_len]:
                     raise ValueError(
                         f"Response validation failed between '{self.tests[0].pretty()}' "
                         f"and '{self.tests[i].pretty()}': sequences do not match."
                     )
-                # Compare hashes ONLY if both reached the same length beyond the limit
+                # Compare tail hashes if lengths match and are above limit
                 if (
                     len(first_seq) >= self.validate_limit
                     and len(seq) >= self.validate_limit
