@@ -23,7 +23,7 @@ def my_function():
     return sum(range(10000))
 
 # Per-benchmark configuration
-@suite.bench(name="Fast Math", max_itr=5000)
+@suite.bench(name="Fast Math", max_samples=5000)
 def fast():
     return 1 + 1
 
@@ -51,10 +51,13 @@ Any setting in the `Suite` can be overridden per-benchmark via keyword arguments
 | --- | --- | --- |
 | `name` | `str` | Display name in reports |
 | `timeout` | `float` | Per-test time limit in seconds |
-| `max_itr` | `int` | Maximum execution count |
-| `min_itr` | `int` | Minimum execution count |
+| `max_samples` | `int` | Maximum statistical samples to collect |
+| `min_samples` | `int` | Minimum statistical samples to collect |
 | `cut` | `float` | Percentage of outliers to trim (0.0 to 0.5) |
 | `disable_stdout` | `bool` | Mute `print()` output inside the target |
+| `disable_gc` | `bool` | Disable garbage collection during benchmark |
+| `batch_size` | `int` | Force a specific batch size (0 for auto-calibration) |
+| `live_output` | `bool` | Show real-time progress in the console |
 | `verbose` | `bool` | Include extra stats in `results.print()` |
 | `before` | `callable` | Local setup hook |
 | `after` | `callable` | Local teardown hook |
@@ -66,13 +69,16 @@ Any setting in the `Suite` can be overridden per-benchmark via keyword arguments
 ### `Suite`
 
 - `timeout` (float): Default time limit (10s).
-- `max_itr` (int): Default max runs (1000).
-- `min_itr` (int): Default min runs (3).
+- `max_samples` (int): Default max samples (1000).
+- `min_samples` (int): Default min samples (3).
 - `cut` (float): Default outlier threshold (0.05).
-- `warmup_itr` (int): Number of unmeasured runs to perform before benchmarking (0).
+- `warmup_samples` (int): Number of unmeasured runs to perform before benchmarking (0).
 - `validate_responses` (bool): Enable cross-test output consistency checks (False).
-- `validate_limit` (int): Max number of iterations to store for full sequence validation (10,000).
+- `validate_limit` (int): Max number of iterations to store for full sequence validation (5).
 - `disable_stdout` (bool): Global stdout suppressor.
+- `disable_gc` (bool): Global GC control.
+- `batch_size` (int): Global batch size override.
+- `live_output` (bool): Global progress toggle.
 - `verbose` (bool): Global verbosity flag.
 
 ### `BenchmarkResults`
