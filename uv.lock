@@ -319,7 +319,7 @@ wheels = [
 
 [[package]]
 name = "pybencher"
-version = "2.4.0"
+version = "2.4.1"
 source = { editable = "." }
 
 [package.dev-dependencies]
