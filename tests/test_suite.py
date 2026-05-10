@@ -183,6 +183,26 @@ def test_result_serialization() -> None:
     assert "ser" in repr(results[0])
 
 
+def test_to_markdown() -> None:
+    """Verify markdown table export."""
+    suite = Suite()
+    suite.set_batch_size(1)
+    suite.set_max_samples(3)
+    suite.set_cut(0.0)
+
+    @suite.bench(name="test_bench")
+    def foo() -> None:
+        pass
+
+    results = suite.run()
+    md = results.to_markdown()
+
+    assert "| Name | Average | Median | Std Dev | Min | Max | Itr/s | Total Runs |" in md
+    assert "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |" in md
+    assert "| test_bench |" in md
+    assert md.count("|") >= 20  # Header + divider + at least one row
+
+
 def test_results_iteration() -> None:
     """__iter__ and __len__."""
     suite = Suite()

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pybencher"
-version = "2.4.1"
+version = "2.4.2"
 authors = [
   { name="Barnaby Gill", email="barnabasgill@gmail.com" },
 ]
@@ -46,3 +46,11 @@ line-length = 120
 src = ["src", "tests"]
 
 [tool.ruff.lint]
+
+[tool.coverage.run]
+source = ["src/pybencher"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 100
