@@ -343,3 +343,105 @@ def test_validate_responses_tail_hash_failure() -> None:
 @pytest.fixture
 def results_list() -> list[str]:
     return []
+
+
+def test_validate_responses_unhashable_type() -> None:
+    """Verify that unhashable types do not raise TypeError during tail hashing."""
+    suite = Suite()
+    suite.set_validate_responses(True)
+    suite.set_validate_limit(1)
+    suite.set_max_itr(5)
+    suite.set_cut(0.0)
+
+    # Returns a list which is unhashable
+    suite.add(lambda: [1, 2, 3], name="f1")
+    suite.add(lambda: [1, 2, 3], name="f2")
+
+    # Should not raise
+    results = suite.run()
+    assert len(results) == 2
+
+
+def test_validate_responses_unhashable_type_mismatch() -> None:
+    """Verify that unhashable types with mismatched values raise ValueError."""
+    suite = Suite()
+    suite.set_validate_responses(True)
+    suite.set_validate_limit(1)
+    suite.set_max_itr(5)
+    suite.set_cut(0.0)
+
+    # We need the first item to match, but later items to differ
+    # so we trigger the tail hash mismatch instead of sequence mismatch.
+    def get_func(deviate_at: int) -> Callable[[], list[int]]:
+        state = {"c": 0}
+
+        def f() -> list[int]:
+            state["c"] += 1
+            if state["c"] > deviate_at:
+                return [1, 2, 4]
+            return [1, 2, 3]
+
+        return f
+
+    suite.add(get_func(100), name="f1")
+    suite.add(get_func(2), name="f2")
+
+    with pytest.raises(ValueError, match="tail hashes do not match"):
+        suite.run()
+
+
+def test_disable_gc_feature() -> None:
+    import gc
+
+    suite = Suite()
+    suite.set_max_itr(1)
+    suite.set_cut(0.0)
+
+    # We will test that gc gets disabled inside the function run
+    gc_status = []
+
+    @suite.bench(disable_gc=True)
+    def foo() -> None:
+        gc_status.append(gc.isenabled())
+
+    suite.run()
+
+    assert len(gc_status) == 1
+    assert gc_status[0] is False
+    # Ensure GC is re-enabled afterwards
+    assert gc.isenabled() is True
+
+
+def test_batch_size_feature() -> None:
+    suite = Suite()
+    suite.set_max_itr(1)
+    suite.set_cut(0.0)
+
+    call_count = []
+
+    @suite.bench(batch_size=5)
+    def foo() -> None:
+        call_count.append(1)
+
+    results = suite.run()
+
+    assert results[0].iterations == 1
+    assert len(call_count) == 5
+
+
+def test_warmup_timeout() -> None:
+    import time
+
+    suite = Suite()
+    suite.set_warmup_itr(100)
+    suite.set_timeout(0.05)
+    suite.set_max_itr(1)
+    suite.set_cut(0.0)
+
+    with pytest.warns(UserWarning, match="Warmup phase for 'slow_warmup' exceeded timeout"):
+
+        @suite.bench(name="slow_warmup")
+        def slow_warmup(default_batch_size: int = 1) -> None:
+            time.sleep(0.01)
+
+        suite.run()
