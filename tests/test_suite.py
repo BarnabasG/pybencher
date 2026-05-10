@@ -370,8 +370,7 @@ def test_validate_responses_unhashable_type_mismatch() -> None:
     suite.set_max_itr(5)
     suite.set_cut(0.0)
 
-    # We need the first item to match, but later items to differ
-    # so we trigger the tail hash mismatch instead of sequence mismatch.
+    # First item to match, but tail hash mismatch
     def get_func(deviate_at: int) -> Callable[[], list[int]]:
         state = {"c": 0}
 
@@ -397,7 +396,6 @@ def test_disable_gc_feature() -> None:
     suite.set_max_itr(1)
     suite.set_cut(0.0)
 
-    # We will test that gc gets disabled inside the function run
     gc_status = []
 
     @suite.bench(disable_gc=True)
@@ -408,7 +406,7 @@ def test_disable_gc_feature() -> None:
 
     assert len(gc_status) == 1
     assert gc_status[0] is False
-    # Ensure GC is re-enabled afterwards
+    # Ensure GC is re-enabled
     assert gc.isenabled() is True
 
 

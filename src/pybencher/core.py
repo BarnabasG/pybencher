@@ -86,7 +86,7 @@ class BenchmarkResults:
             if t < factor * ratio:
                 num = f"{t / ratio:#.3g}".rstrip(".")
                 return f"{num}{unit}"
-        return str(timedelta(seconds=int(round(t)))).removeprefix("0:")
+        return str(timedelta(seconds=round(t))).removeprefix("0:")
 
 
 class _BeforeAfter:
