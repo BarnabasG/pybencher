@@ -1,3 +1,4 @@
+import gc
 import io
 import json
 import warnings
@@ -5,7 +6,10 @@ from contextlib import redirect_stdout
 from dataclasses import asdict, dataclass
 from datetime import timedelta
 from time import perf_counter
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, TypeVar, ParamSpec
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
 @dataclass(frozen=True)
@@ -82,7 +86,7 @@ class BenchmarkResults:
             if t < factor * ratio:
                 num = f"{t / ratio:#.3g}".rstrip(".")
                 return f"{num}{unit}"
-        return str(timedelta(seconds=int(round(t)))).removeprefix("0:")
+        return str(timedelta(seconds=round(t))).removeprefix("0:")
 
 
 class _BeforeAfter:
@@ -117,6 +121,8 @@ class _Function:
         cut: Optional[float] = None,
         disable_stdout: Optional[bool] = None,
         verbose: Optional[bool] = None,
+        disable_gc: Optional[bool] = None,
+        batch_size: Optional[int] = None,
         before: Optional[Callable[..., Any]] = None,
         after: Optional[Callable[..., Any]] = None,
     ) -> None:
@@ -133,6 +139,8 @@ class _Function:
         self._cut = cut
         self._disable_stdout = disable_stdout
         self._verbose = verbose
+        self._disable_gc = disable_gc
+        self._batch_size = batch_size
         self._before_fn = before
         self._after_fn = after
 
@@ -149,16 +157,27 @@ class _Function:
         self.before_hook = _BeforeAfter(self._before_fn) if self._before_fn else before
         self.after_hook = _BeforeAfter(self._after_fn) if self._after_fn else after
 
-    def __call__(self) -> Tuple[float, Any]:
-        """Run function once and return elapsed time."""
+    def __call__(self, default_batch_size: int = 1) -> Tuple[float, Any]:
+        """Run function once (or batch_size times) and return elapsed time."""
         if self.before_hook:
             self.before_hook()
+
+        batch_size = self._batch_size if self._batch_size is not None else default_batch_size
         start = perf_counter()
-        res = self.func(*self.args, **self.kwargs)
+
+        # Micro-benchmark overhead amortization
+        if batch_size > 1:
+            for _ in range(batch_size):
+                res = self.func(*self.args, **self.kwargs)
+        else:
+            res = self.func(*self.args, **self.kwargs)
+
         duration = perf_counter() - start
+
         if self.after_hook:
             self.after_hook()
-        return duration, res
+
+        return duration / batch_size, res
 
     def __hash__(self) -> int:
         return hash(tuple([self.func_name, self.args, tuple(self.kwargs.items())]))
@@ -189,9 +208,11 @@ class Suite:
         self.cut = 0.05
         self.disable_stdout = False
         self.verbose = False
+        self.disable_gc = False
+        self.batch_size = 1
         self.warmup_itr = 0
         self.validate_responses = False
-        self.validate_limit = 10000
+        self.validate_limit = 5
         self._beforeFunc: Optional[_BeforeAfter] = None
         self._afterFunc: Optional[_BeforeAfter] = None
 
@@ -207,16 +228,18 @@ class Suite:
         cut: Optional[float] = None,
         disable_stdout: Optional[bool] = None,
         verbose: Optional[bool] = None,
+        disable_gc: Optional[bool] = None,
+        batch_size: Optional[int] = None,
         before: Optional[Callable[..., Any]] = None,
         after: Optional[Callable[..., Any]] = None,
-    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    ) -> Callable[[Callable[P, R]], Callable[P, R]]:
         """Decorator to register a benchmark.
 
         Pass function inputs via ``args`` and ``kwargs``.
         All other parameters are benchmark configuration overrides.
         """
 
-        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        def decorator(func: Callable[P, R]) -> Callable[P, R]:
             self.add(
                 func,
                 args=args,
@@ -228,6 +251,8 @@ class Suite:
                 cut=cut,
                 disable_stdout=disable_stdout,
                 verbose=verbose,
+                disable_gc=disable_gc,
+                batch_size=batch_size,
                 before=before,
                 after=after,
             )
@@ -269,6 +294,8 @@ class Suite:
         cut: Optional[float] = None,
         disable_stdout: Optional[bool] = None,
         verbose: Optional[bool] = None,
+        disable_gc: Optional[bool] = None,
+        batch_size: Optional[int] = None,
         before: Optional[Callable[..., Any]] = None,
         after: Optional[Callable[..., Any]] = None,
     ) -> None:
@@ -287,6 +314,8 @@ class Suite:
                 cut=cut,
                 disable_stdout=disable_stdout,
                 verbose=verbose,
+                disable_gc=disable_gc,
+                batch_size=batch_size,
                 before=before,
                 after=after,
             )
@@ -313,6 +342,8 @@ class Suite:
             "cut_percentage": self.cut,
             "disable_stdout": self.disable_stdout,
             "verbose": self.verbose,
+            "disable_gc": self.disable_gc,
+            "batch_size": self.batch_size,
             "before": self._beforeFunc.name if self._beforeFunc else None,
             "after": self._afterFunc.name if self._afterFunc else None,
         }
@@ -327,16 +358,24 @@ class Suite:
         runs = 0
         results_seq: List[Any] = []
         tail_hash = 0
+        _is_hashable: Optional[bool] = None
 
         # Configuration priority: test override > suite default
         max_itr = func._max_itr if func._max_itr is not None else self.max_itr
         timeout = func._timeout if func._timeout is not None else self.timeout
         min_itr = func._min_itr if func._min_itr is not None else self.min_itr
         cut = func._cut if func._cut is not None else self.cut
+        disable_gc = func._disable_gc if func._disable_gc is not None else self.disable_gc
 
         # Warm-up phase
+        warmup_start = perf_counter()
         for _ in range(self.warmup_itr):
-            func()
+            func(default_batch_size=self.batch_size)
+            if perf_counter() - warmup_start > timeout:
+                warnings.warn(
+                    f"Warmup phase for '{func.pretty()}' exceeded timeout ({timeout}s), aborting warmup early."
+                )
+                break
 
         # actual_max can be negative if cut >= 0.5, ensure it's at least 1 if max_itr > 0
         denominator = 1 - (2 * cut)
@@ -345,20 +384,39 @@ class Suite:
         else:
             actual_max = int(max_itr / denominator)
 
-        for _ in range(actual_max):
-            t, res = func()
-            times.append(t)
-            total += t
-            runs += 1
+        if disable_gc:
+            gc_was_enabled = gc.isenabled()
+            gc.disable()
 
-            if self.validate_responses:
-                if len(results_seq) < self.validate_limit:
-                    results_seq.append(res)
-                else:
-                    tail_hash = hash((tail_hash, res))
+        try:
+            for _ in range(actual_max):
+                t, res = func(default_batch_size=self.batch_size)
+                times.append(t)
+                total += t
+                runs += 1
 
-            if total > timeout and runs >= min_itr:
-                break
+                if self.validate_responses:
+                    if len(results_seq) < self.validate_limit:
+                        results_seq.append(res)
+                    else:
+                        if _is_hashable is None:
+                            try:
+                                hash(res)
+                                _is_hashable = True
+                            except TypeError:
+                                _is_hashable = False
+
+                        if _is_hashable:
+                            tail_hash = hash((tail_hash, res))
+                        else:
+                            tail_hash = hash((tail_hash, repr(res)))
+
+                if total > timeout and runs >= min_itr:
+                    break
+        finally:
+            if disable_gc and gc_was_enabled:
+                gc.enable()
+
         return times, runs, results_seq, tail_hash
 
     def _get_output_details(self, func: _Function, times: List[float], runs: int) -> BenchmarkResult:
